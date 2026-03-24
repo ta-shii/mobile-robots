@@ -1,6 +1,8 @@
 .DS_Store
 .history/
+.devcontainer/
+.vscode/
+*.txt
 AUT4508 - Group Project 2026 - V1_0.pdf
 Proj-README.md
 Resources.zip
-Resources/
