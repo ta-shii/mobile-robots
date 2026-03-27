@@ -155,7 +155,7 @@
       </material>
     </visual>
     <collision>
-      <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
+      <origin rpy="0 1.57079635 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
         <cylinder length="0.075" radius="0.111"/>
@@ -291,7 +291,7 @@
     </visual>
 
     <collision>
-      <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
+      <origin rpy="0 1.57079635 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
         <cylinder length="0.075" radius="0.111"/>
@@ -410,7 +410,7 @@
     </visual>
 
     <collision>
-      <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
+      <origin rpy="0 1.57079635 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
         <cylinder length="0.075" radius="0.111"/>
@@ -527,7 +527,7 @@
       </material>
     </visual>
     <collision>
-      <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
+      <origin rpy="0 1.57079635 0" xyz="0 0 0"/>
       <geometry>
         <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
         <cylinder length="0.075" radius="0.111"/>
