@@ -253,7 +253,7 @@
         <color rgba="1.0 0.811 0.151 1.0"/>
       </material>
     </visual>
-    
+
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -271,6 +271,52 @@
     <parent link="p3at_front_right_axle"/>
     <child link="p3at_front_right_hub"/>
   </joint>
+
+    <!-- Front Right Wheel -->
+  <link name="p3at_front_right_wheel">
+    <inertial>
+      <mass value="0.5"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="0.012411765597" ixy="0" ixz="0" iyy="0.015218160428" iyz="0" izz="0.011763977943"/>
+    </inertial>
+
+    <visual name="front_right_wheel">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry name="pioneer_geom">
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
+      </geometry>
+      <material name="WheelBlack">
+        <color rgba="0.117 0.117 0.117 1"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
+        <cylinder length="0.075" radius="0.111"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <gazebo reference="p3at_front_right_wheel">
+    <material value="Gazebo/Black"/>
+  </gazebo>
+
+  <joint name="p3at_front_right_wheel_joint" type="continuous">
+    <axis xyz="0 1 0"/>
+    <anchor xyz="0 0 0"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="p3at_front_right_hub"/>
+    <child link="p3at_front_right_wheel"/>
+    <limit effort="100" velocity="100"/>
+    <joint_properties damping="0.7"/>
+  </joint>
+
+  <gazebo reference="p3at_front_right_wheel">
+    <kp>10000000.0</kp>
+    <kd>100.0</kd>
+  </gazebo>
 
   <!-- lidar -->
   
