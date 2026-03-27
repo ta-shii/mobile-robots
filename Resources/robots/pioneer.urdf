@@ -236,6 +236,42 @@
     <child link="p3at_front_right_axle"/>
   </joint>
 
+  <!-- Front Right Hub -->
+  <link name="p3at_front_right_hub">
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+
+    <visual name="front_right_hub">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry name="pioneer_geom">
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/right_hubcap.dae"/>
+      </geometry>
+      <material name="HubcapYellow">
+        <color rgba="1.0 0.811 0.151 1.0"/>
+      </material>
+    </visual>
+    
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <gazebo reference="p3at_front_right_hub">
+    <material value="Gazebo/Yellow"/>
+  </gazebo>
+
+  <joint name="base_front_right_hub_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 -0.041 0"/>
+    <parent link="p3at_front_right_axle"/>
+    <child link="p3at_front_right_hub"/>
+  </joint>
+
   <!-- lidar -->
   
 
