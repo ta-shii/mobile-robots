@@ -318,6 +318,44 @@
     <kd>100.0</kd>
   </gazebo>
 
+  <!-- Back Wheel -->
+  <!-- Back Left Axle -->
+  <link name="p3at_back_left_axle">
+    <inertial>
+      <mass value="0.1"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+
+    <visual name="back_left_axle">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry name="pioneer_geom">
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/axle.dae"/>
+      </geometry>
+      <material name="AxleGrey">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <gazebo reference="p3at_back_left_axle">
+    <material value="Gazebo/Grey"/>
+  </gazebo>
+
+  <joint name="base_back_left_axle_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="-0.135 0.156 0.111"/>
+    <parent link="base_link"/>
+    <child link="p3at_back_left_axle"/>
+  </joint>
+
+
   <!-- lidar -->
   
 
