@@ -16,8 +16,11 @@
       <geometry name="pioneer_geom">
         <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/chassis.dae"/>
       </geometry>
-      <material name="ChassisRed"/>
+      <material name="ChassisRed">
+        <color rgba="0.8 0.0 0.0 1.0"/>
+      </material>
     </visual>
+
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0.0"/>
       <geometry>
