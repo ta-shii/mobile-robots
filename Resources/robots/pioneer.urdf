@@ -14,14 +14,14 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0.0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="<path_to_meshes_or_robot>/meshes/chassis.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/chassis.dae"/>
       </geometry>
       <material name="ChassisRed"/>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0.0"/>
       <geometry>
-        <mesh filename="<path_to_meshes_or_robot>/meshes/chassis.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/chassis.dae"/>
       </geometry>
     </collision>
   </link>
@@ -51,7 +51,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="<path_to_meshes_or_robot>/meshes/top.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/top.dae"/>
       </geometry>
       <material name="TopBlack">
         <color rgba="0.038 0.038 0.038 1.0"/>
@@ -83,7 +83,7 @@
     <visual name="front_left_axle">
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="<path_to_meshes_or_robot>/meshes/p3at_meshes/axle.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/axle.dae"/>
       </geometry>
       <material name="AxleGrey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -114,7 +114,7 @@
     <visual name="front_left_hub">
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="<path_to_meshes_or_robot>/meshes/p3at_meshes/left_hubcap.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/left_hubcap.dae"/>
       </geometry>
       <material name="HubcapYellow">
         <color rgba="1.0 0.811 0.151 1.0"/>
@@ -145,7 +145,7 @@
     <visual name="front_left_wheel">
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="<path_to_meshes_or_robot>/meshes/p3at_meshes/wheel.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
       </geometry>
       <material name="WheelBlack">
         <color rgba="0.117 0.117 0.117 1"/>
@@ -154,7 +154,7 @@
     <collision>
       <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="<path_to_meshes_or_robot>/meshes/p3at_meshes/wheel.dae"/>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/p3at_meshes/wheel.dae"/>
         <cylinder length="0.075" radius="0.111"/>
       </geometry>
     </collision>
