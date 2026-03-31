@@ -189,7 +189,7 @@
       <left_joint>p3at_back_left_wheel_joint</left_joint>
       <right_joint>p3at_back_right_wheel_joint</right_joint>
       <right_joint>p3at_front_right_wheel_joint</right_joint>
-      <wheel_separation>0.268</wheel_separation>
+      <wheel_separation>0.268</wheel_separation> <!-- 0.394 distance between the left and right wheels -->
       <wheel_radius>0.111</wheel_radius>
       <odom_publish_frequency>20</odom_publish_frequency>
       <topic>cmd_vel</topic>
@@ -555,6 +555,56 @@
   </gazebo>
 
   <!-- lidar -->
+  <joint name="laser_joint" type="fixed">
+    <parent link="chassis" />
+    <child link="laser_frame" />
+    <origin xyz="0.2 0 0.104" rpy="0 0 0"/>
+  </joint>
+
+  <link name="laser_frame">
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+    </collision>
+
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/> 
+      <geometry>
+        <mesh filename="/home/tashi/Desktop/project-mobrob/Resources/meshes/hokuyo1.dae"/>
+      </geometry>
+    </visual>
+
+    <inertial>
+      <mass value="1e-5" />
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
+    </inertial>
+  </link>
+
+  <gazebo reference="laser_frame">
+    <material>Gazebo/Blue</material>
+    <sensor name="laser" type="gpu_lidar">
+        <topic>scan</topic>
+        <update_rate>10</update_rate>
+        <frame>laser_frame</frame>
+
+        <lidar>
+        <scan>
+            <horizontal>
+            <samples>640</samples>
+            <min_angle>-1.5708</min_angle>
+            <max_angle>1.5708</max_angle>
+            </horizontal>
+        </scan>
+        <range>
+            <min>0.05</min>
+            <max>10.0</max>
+        </range>
+        </lidar>
+    </sensor>
+    </gazebo>
   
 
   <!-- camera -->
