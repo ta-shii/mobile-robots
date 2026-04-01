@@ -29,6 +29,7 @@ setup(
             'multi_waypoint_controller = p3at.multi_waypoint_controller:main',
             'obstacle_aware_waypoint_controller = p3at.obstacle_aware_waypoint_controller:main',
             'path_recorder = p3at.path_recorder:main',
+            'lidar_map_recorder = p3at.lidar_map_recorder:main',
         ],
     },
 )
