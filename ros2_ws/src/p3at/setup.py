@@ -28,6 +28,7 @@ setup(
             'waypoint_controller = p3at.waypoint_controller:main',
             'multi_waypoint_controller = p3at.multi_waypoint_controller:main',
             'obstacle_aware_waypoint_controller = p3at.obstacle_aware_waypoint_controller:main',
+            'path_recorder = p3at.path_recorder:main',
         ],
     },
 )
