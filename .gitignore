@@ -1,9 +1,20 @@
+# OS files
 .DS_Store
 .history/
+
+# VSCode
 .devcontainer/
 .vscode/
+
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# Files/Folders to ignore
 *.txt
 AUT4508 - Group Project 2026 - V1_0.pdf
 Proj-README.md
 Resources.zip
 Resources/meshes
+snaps
