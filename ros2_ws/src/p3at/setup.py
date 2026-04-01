@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'simple_avoid = p3at.simple_avoid:main',
             'waypoint_controller = p3at.waypoint_controller:main',
+            'multi_waypoint_controller = p3at.multi_waypoint_controller:main',
         ],
     },
 )
