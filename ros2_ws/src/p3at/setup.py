@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'simple_avoid = p3at.simple_avoid:main',
+            'waypoint_controller = p3at.waypoint_controller:main',
         ],
     },
 )
