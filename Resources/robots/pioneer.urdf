@@ -589,6 +589,8 @@
         <topic>scan</topic>
         <update_rate>10</update_rate>
         <frame>laser_frame</frame>
+        <visualize>true</visualize>
+
 
         <lidar>
         <scan>
