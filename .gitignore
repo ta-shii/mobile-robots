@@ -20,3 +20,5 @@ Resources/meshes
 snaps
 Resources/meshes
 meshes
+
+__pycache__/
