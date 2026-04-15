@@ -12,13 +12,9 @@ install/
 log/
 
 # Files/Folders to ignore
-*.txt
+docs
 AUT4508 - Group Project 2026 - V1_0.pdf
-Proj-README.md
-Resources.zip
 Resources/meshes
-snaps
-Resources/meshes
-meshes
+meshes/
 
 __pycache__/

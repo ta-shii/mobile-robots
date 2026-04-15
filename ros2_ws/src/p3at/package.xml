@@ -3,7 +3,7 @@
 <package format="3">
   <name>p3at</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>P3AT simulation and control package</description>
   <maintainer email="tashichimilhamo@gmail.com">tashi</maintainer>
   <license>TODO: License declaration</license>
 
@@ -11,10 +11,18 @@
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+
 
   <export>
     <build_type>ament_python</build_type>
