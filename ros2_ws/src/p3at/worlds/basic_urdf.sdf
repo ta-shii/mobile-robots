@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <sdf version="1.8">
     <world name="pioneer_world">
-        <physics name="1ms" type="ignored">
+        <physics name="1ms" type="ode">
             <max_step_size>0.001</max_step_size>
             <real_time_factor>1.0</real_time_factor>
         </physics>
@@ -40,22 +40,7 @@
                 </attenuation>
                 <direction>-0.5 0.1 -0.9</direction>
             </light>
-
-            <visual name="visual">
-            <geometry>
-                <plane>
-                <normal>0 0 1</normal>
-                <size>100 100</size>
-                </plane>
-            </geometry>
-
-            <material>
-                <script>
-                <uri>file://media/materials/scripts/gazebo.material</uri>
-                <name>Gazebo/Grass</name>
-                </script>
-            </material>
-            </visual>
+            
 
             <model name="ground_plane">
                 <static>true</static>
@@ -140,7 +125,7 @@
 
             <model name="cone_1">
             <static>true</static>
-            <pose>2 1 0 0 0 0</pose>
+            <pose>2 1 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
@@ -168,7 +153,7 @@
 
             <model name="cone_2">
             <static>true</static>
-            <pose>4 -1 0 0 0 0</pose>
+            <pose>4 -1 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
@@ -196,7 +181,7 @@
 
             <model name="cone_3">
             <static>true</static>
-            <pose>6 2 0 0 0 0</pose>
+            <pose>6 2 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
@@ -224,7 +209,7 @@
 
             <model name="bucket_1">
             <static>true</static>
-            <pose>3 3 0 0 0 0</pose>
+            <pose>3 3 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
@@ -252,7 +237,7 @@
 
             <model name="bucket_2">
             <static>true</static>
-            <pose>5 -3 0 0 0 0</pose>
+            <pose>5 -3 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
@@ -280,7 +265,7 @@
 
             <model name="bucket_3">
             <static>true</static>
-            <pose>7 0 0 0 0 0</pose>
+            <pose>7 0 0.3 0 0 0</pose>
             <link name="link">
                 <visual name="visual">
                 <geometry>
