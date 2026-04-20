@@ -10,6 +10,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
+include_directories(/home/tashi/AriaCoda/include)
+link_directories(/home/tashi/AriaCoda/lib)
+
 message("The root directory is ${CMAKE_MODULE_PATH}")
 
 #find_library(ARIA_LIB Aria)
@@ -38,7 +41,7 @@ ament_target_dependencies(ariaNode
 
 target_link_libraries(
   ariaNode
-  libAria.so
+  Aria
 )
 
 install(TARGETS

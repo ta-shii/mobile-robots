@@ -14,7 +14,9 @@ log/
 # Files/Folders to ignore
 docs
 AUT4508 - Group Project 2026 - V1_0.pdf
+AUT4508 - Group Project 2026.pdf
 Resources/meshes
 meshes/
+g9/
 
 __pycache__/
