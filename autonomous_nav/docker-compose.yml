@@ -6,19 +6,20 @@ services:
     network_mode: host         # ROS2 DDS needs host networking
     privileged: true           # Required for serial port + USB devices
     environment:
-      - ROS_DOMAIN_ID=42
+      - ROS_DOMAIN_ID=9
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - DISPLAY=${DISPLAY:-:0}
     volumes:
-      - /dev:/dev              # Serial port (/dev/ttyUSB0) + USB camera
-      - ./part2_nav:/ros_ws/src/part2_nav   # Live-reload source during dev
-      - ./ariaNode:/ros_ws/src/ariaNode
-      - ./photos:/tmp/cone_photos           # Persist cone photos to host
-      - /tmp/.X11-unix:/tmp/.X11-unix       # X11 for rviz (optional)
+      - /dev:/dev                                                         # Serial port (/dev/ttyUSB0) + USB camera
+      - ./part2_nav:/workspace/ros2_ws/src/part2_nav                     # Live-reload source during dev
+      - ./ariaNode:/workspace/ros2_ws/src/ariaNode
+      - ./photos:/tmp/cone_photos                                         # Persist cone photos to host
+      - /tmp/.X11-unix:/tmp/.X11-unix                                     # X11 for rviz (optional)
     devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0           # Pioneer serial connection
+      - /dev/ttyUSB0:/dev/ttyUSB0                                         # Pioneer serial connection
     command: >
       ros2 launch part2_nav part2.launch.py
-        waypoints_file:=/ros_ws/src/part2_nav/config/waypoints.yaml
+        waypoints_file:=/workspace/ros2_ws/src/part2_nav/config/waypoints.yaml
 
   # Run ariaNode standalone (alternative to including in launch)
   aria:
@@ -27,7 +28,8 @@ services:
     network_mode: host
     privileged: true
     environment:
-      - ROS_DOMAIN_ID=42
+      - ROS_DOMAIN_ID=9
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0
     command: ros2 run ariaNode ariaNode -rp /dev/ttyUSB0
