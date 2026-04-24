@@ -1,4 +1,5 @@
 # OS files
+.cache/
 .DS_Store
 .history/
 
@@ -17,6 +18,11 @@ AUT4508 - Group Project 2026 - V1_0.pdf
 AUT4508 - Group Project 2026.pdf
 Resources/meshes
 meshes/
-g9/
+g9.2/
+now/
+Other/
+outputs/
+p2/
+Dylan's stuff/
 
 __pycache__/
