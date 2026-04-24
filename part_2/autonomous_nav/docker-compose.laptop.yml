@@ -1,0 +1,46 @@
+# Laptop / development override — use instead of docker-compose.yml on a machine
+# without the Pioneer robot connected.
+#
+# Usage:
+#   docker compose -f docker-compose.laptop.yml up
+#
+# Differences from the robot compose file:
+#   - No /dev/ttyUSB0 device mapping (Pioneer not connected)
+#   - No privileged mode needed
+#   - Adds a mock_gps service that publishes fake GPS so the navigator runs
+
+services:
+
+  # ── Main nav stack (same as robot, minus hardware devices) ──────────────
+  part2_nav:
+    build: .
+    image: pioneer_part2:latest
+    container_name: pioneer_part2
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=9
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      - ./part2_nav:/workspace/ros2_ws/src/part2_nav     # live code reload
+      - ./ariaNode:/workspace/ros2_ws/src/ariaNode
+      - ./photos:/tmp/cone_photos
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    command: >
+      ros2 launch part2_nav part2_laptop.launch.py
+        waypoints_file:=/workspace/ros2_ws/src/part2_nav/config/waypoints.yaml
+
+  # ── Mock GPS publisher ──────────────────────────────────────────────────
+  # Publishes fake /fix messages that simulate the robot moving through
+  # waypoints so you can watch the navigator logic work in real time.
+  mock_gps:
+    image: pioneer_part2:latest
+    container_name: mock_gps
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=9
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - ./part2_nav:/workspace/ros2_ws/src/part2_nav
+    command: >
+      python3 /workspace/ros2_ws/src/part2_nav/scripts/mock_gps.py

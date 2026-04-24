@@ -1,0 +1,7 @@
+/waypoint_navigator:
+  ros__parameters:
+    waypoints_file: /workspace/autonomous_nav/part2_nav/config/waypoints.yaml
+    arrival_radius: 1.5
+    max_linear: 0.3
+    max_angular: 0.5
+    heading_gain: 1.2
