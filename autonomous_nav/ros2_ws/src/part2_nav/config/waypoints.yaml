@@ -1,0 +1,21 @@
+# GPS waypoints for Part 2 — James Oval, UWA
+#
+# arrival_radius: 5.0 m  (matches rubric: "visits all waypoints within 5m")
+#
+# TESTING (mock_gps on Desktop):
+#   These placeholder coords form a rough triangle ~25 m per leg.
+#   Each leg takes ~90 s at 0.3 m/s.  Full loop ≈ 6 minutes.
+#
+# REAL ROBOT (James Oval):
+#   Stand at each orange cone with the GPS receiver and run:
+#     ros2 topic echo /fix --once
+#   Replace lat/lon below with the values you read.
+
+waypoints:
+  - name: "Waypoint 1"
+    lat: -31.98048    # ~20 m south of home
+    lon: 115.81740
+
+  - name: "Waypoint 2"
+    lat: -31.98048    # ~20 m east of WP1
+    lon: 115.81762
