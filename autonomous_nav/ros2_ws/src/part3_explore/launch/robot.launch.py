@@ -120,7 +120,7 @@ def generate_launch_description():
             'sensorip':     lakibeam_ip,
             'hostip':       '192.168.198.50',
             'port':         '2368',
-            'frame_id':     'laser',
+            'frame_id':     'laser_frame',
             'output_topic': 'scan',
         }],
     )
