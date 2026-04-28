@@ -4,9 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ARG ARIACODA_REF=master
 
-# -------------------------
 # System dependencies
-# -------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
@@ -20,26 +18,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     iproute2 \
     iputils-ping \
-    joystick \
     usbutils \
     libusb-1.0-0-dev \
     python3-colcon-common-extensions \
     python3-pip \
     python3-venv \
-    python3-opencv \
     python3-rosdep \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------
 # Add ROS testing repo (needed for depthai ROS v3)
-# -------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros2-testing-apt-source \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------
 # ROS packages
-# -------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-joy \
     ros-jazzy-teleop-twist-joy \
@@ -63,25 +55,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rmw-cyclonedds-cpp \
     ros-jazzy-rviz2 \
     ros-jazzy-depthai-ros-v3 \
+    ros-jazzy-robot-state-publisher \
+    ros-jazzy-xacro \
+    ros-jazzy-slam-toolbox \
+    ros-jazzy-navigation2 \
+    ros-jazzy-nav2-bringup \
+    ros-jazzy-rosbag2 \
+    ros-jazzy-rosbag2-storage-mcap \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------
-# Python packages for project nodes
-# -------------------------
-RUN pip3 install --break-system-packages \
-    matplotlib \
-    pyyaml \
-    numpy \
-    depthai
+# Tesseract OCR with Greek language pack
+# 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-ell \
+    python3-pyqt5 \
+    && rm -rf /var/lib/apt/lists/*
 
-# -------------------------
-# rosdep init (safe in Docker)
-# -------------------------
+# Python packages
+RUN pip3 install --break-system-packages --ignore-installed \
+    "numpy<2" \
+    matplotlib \
+    "opencv-python<4.10" \
+    depthai \
+    pytesseract
+
+# Lakibeam ROS2 driver
+RUN mkdir -p /workspace/autonomous_nav/ros2_ws/src && \
+    git clone --depth 1 \
+        https://github.com/RichbeamTechnology/Lakibeam_ROS2_Driver.git \
+        /workspace/autonomous_nav/ros2_ws/src/lakibeam1_ros2 || \
+    echo "WARNING: Lakibeam clone failed – add manually if needed"
+
+# rosdep init
 RUN rosdep init || true && rosdep update || true
 
-# -------------------------
 # AriaCoda (Pioneer robot library)
-# -------------------------
 RUN set -e; \
     for i in 1 2 3; do \
         rm -rf /tmp/AriaCoda && \
@@ -95,22 +104,16 @@ RUN set -e; \
     && test -f /usr/local/lib/libAria.so || { echo "AriaCoda install failed"; exit 1; } \
     && rm -rf /tmp/AriaCoda
 
-# -------------------------
-# Create project workspace path
-# -------------------------
+# Create workspace path
 RUN mkdir -p /workspace/autonomous_nav
 
-# -------------------------
 # Environment defaults
-# -------------------------
 ENV ROS_DOMAIN_ID=9
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV RCUTILS_COLORIZED_OUTPUT=1
 
-# -------------------------
-# Bash environment for interactive shells
-# -------------------------
+# Bash environment
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc && \
     echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc && \
@@ -119,9 +122,7 @@ RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
     echo "cd /workspace/autonomous_nav" >> /root/.bashrc && \
     echo "if [ -f /workspace/autonomous_nav/install/setup.bash ]; then source /workspace/autonomous_nav/install/setup.bash; fi" >> /root/.bashrc
 
-# -------------------------
 # Entrypoint
-# -------------------------
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
