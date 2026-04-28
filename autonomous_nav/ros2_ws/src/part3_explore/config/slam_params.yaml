@@ -1,0 +1,37 @@
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: false
+
+    # Lidar topic and frames
+    scan_topic: /scan
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+
+    # Mode
+    mode: mapping
+
+    # Map resolution and size
+    resolution: 0.05          # 5 cm per cell – good balance of detail vs speed
+    max_laser_range: 10.0     # Lakibeam max range in metres
+
+    # Update rates
+    map_update_interval: 5.0  # seconds between map publishes
+    update_factor_free: 0.4
+    update_factor_occupied: 0.9
+
+    # Loop closure
+    do_loop_closing: true
+    loop_search_maximum_distance: 3.0
+
+    # Save/serialise
+    # map_file_name: /workspace/autonomous_nav/ros2_ws/src/part3_explore/maps/part3_map
+    # map_start_at_dock: true
+
+    # Plugin
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None

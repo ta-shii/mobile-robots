@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+    # Safety monitor
+    estop_distance: 1.0          # metres – stop if obstacle closer than this
+    estop_cooldown: 2.0          # seconds before estop can re-trigger
+
+    # Mission manager
+    mission_state_topic: /mission/state
+
+    # Logging
+    log_dir: /workspace/autonomous_nav/part3_logs
+
+    # Detection topics
+    color_detection_topic: /detections/color
+    greek_detection_topic: /detections/greek
