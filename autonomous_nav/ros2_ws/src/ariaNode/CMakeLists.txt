@@ -9,6 +9,9 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 message("The root directory is ${CMAKE_MODULE_PATH}")
 
@@ -32,8 +35,11 @@ endif()
 
 add_executable(ariaNode src/ariaNode.cpp)
 ament_target_dependencies(ariaNode
-"geometry_msgs"
-"rclcpp"
+  geometry_msgs
+  nav_msgs
+  rclcpp
+  tf2
+  tf2_ros
 )
 
 target_link_libraries(
