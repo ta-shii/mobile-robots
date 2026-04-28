@@ -62,6 +62,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-nav2-bringup \
     ros-jazzy-rosbag2 \
     ros-jazzy-rosbag2-storage-mcap \
+    ros-jazzy-pcl-conversions \
+    ros-jazzy-pcl-ros \
     && rm -rf /var/lib/apt/lists/*
 
 # Tesseract OCR with Greek language pack
