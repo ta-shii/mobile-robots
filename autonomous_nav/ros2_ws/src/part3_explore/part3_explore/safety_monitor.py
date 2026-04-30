@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 safety_monitor.py
-==========================
 Detects moving obstacles from Lidar and triggers a software e-stop if any
 moving object comes within 1 m of the robot.
 
@@ -35,7 +34,6 @@ Topics published
 """
 
 import math
-import statistics
 import time
 import rclpy
 from rclpy.node import Node
@@ -46,19 +44,14 @@ from sensor_msgs.msg import LaserScan
 
 class MovingObstacleMonitor(Node):
 
-    DANGER_RADIUS = 1.0      # metres – brief requirement
-    WINDOW_SIZE   = 8        # number of scans to keep as background
-    DELTA_THRESH  = 0.4      # metres shorter than background → potential obstacle
-    MIN_BEAMS     = 3        # minimum consecutive beams to confirm detection
+    DANGER_RADIUS = 0.5   # metres – brief requirement
+    MIN_BEAMS     = 3     # minimum beams within radius to confirm (filters noise)
 
     def __init__(self):
         super().__init__('safety_monitor')
 
         self.mission_state = 'IDLE'
         self.estop_active  = False
-
-        # Circular buffer of recent scans (list of range arrays)
-        self.scan_history: list[list[float]] = []
 
         # --- Publishers ---
         self.cmd_pub     = self.create_publisher(Twist,  '/cmd_vel',            10)
@@ -83,45 +76,24 @@ class MovingObstacleMonitor(Node):
             self._set_estop(False)
 
     def _scan_cb(self, msg: LaserScan):
-        ranges = list(msg.ranges)
-
-        # Replace inf/nan with max range so background median is correct
-        max_r = msg.range_max
-        clean = [r if (math.isfinite(r) and r > 0) else max_r for r in ranges]
-
-        # Maintain background window
-        self.scan_history.append(clean)
-        if len(self.scan_history) > self.WINDOW_SIZE:
-            self.scan_history.pop(0)
-
-        # Need at least 2 scans to compute background
-        if len(self.scan_history) < 2:
-            return
-
-        # Only check when robot is doing something (avoid false positives at idle)
+        # Only check when robot is active
         if self.mission_state == 'IDLE':
             return
 
-        # Compute per-beam median background
-        n_beams = len(clean)
-        background = [
-            statistics.median(self.scan_history[i][b] for i in range(len(self.scan_history) - 1))
-            for b in range(n_beams)
-        ]
+        # Replace inf/nan with max range
+        max_r = msg.range_max
+        clean = [r if (math.isfinite(r) and r > 0) else max_r for r in msg.ranges]
 
-        # Detect beams that are significantly closer than background
-        close_beams = 0
-        for b in range(n_beams):
-            range_m = clean[b]
-            # Within danger radius AND significantly shorter than background
-            if range_m < self.DANGER_RADIUS and (background[b] - range_m) > self.DELTA_THRESH:
-                close_beams += 1
+        # Count beams within danger radius.
+        # No background comparison needed — the brief says stop for ANY
+        # object within 1m whether moving or static, and whether robot
+        # is stationary or driving.
+        close_beams = sum(1 for r in clean if r < self.DANGER_RADIUS)
 
         if close_beams >= self.MIN_BEAMS and not self.estop_active:
-            angle_min = msg.angle_min
-            angle_inc = msg.angle_increment
             self._trigger_estop(close_beams, msg.header.stamp)
 
+    # ------------------------------------------------------------------
     def _trigger_estop(self, n_beams: int, stamp):
         self._set_estop(True)
 
