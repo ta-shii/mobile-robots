@@ -4,28 +4,33 @@ sim.launch.py  –  Incremental simulation launch
 Built up stage by stage to match the Week 1 test plan.
 Each stage is tested and committed before the next is added.
 
-Current stage: 1 — World + Robot + Bridges
-  Starts Gazebo, spawns the Pioneer robot, and bridges all
-  Gazebo topics into ROS2.  No navigation or custom nodes yet.
+Current stage: 2 — + SLAM + manual teleop
+  Everything from Stage 1 plus:
+    9.  slam_toolbox (online async) – builds /map from /scan + /odom
+   10.  joy_node                    – reads PS4 gamepad, publishes /joy
+   11.  teleop_twist_joy            – converts /joy → /cmd_vel
+                                      (hold L1 to enable driving)
 
-  What runs:
+  Stage 1 recap:
     1. Gazebo          – physics sim with part3_world.sdf
     2. robot_state_pub – TF tree from URDF (base_link → laser_frame etc.)
     3. joint_state_pub – wheel joint states for URDF
     4. robot_spawn     – drops Pioneer into Gazebo at (0, 0, 0.1)
-    5. lidar_bridge    – gz /scan      → ROS /scan      (LaserScan)
-    6. odom_bridge     – gz /odom      → ROS /odom      (Odometry)
-    7. cmd_vel_bridge  – ROS /cmd_vel  → gz /cmd_vel    (Twist)
-    8. camera_bridge   – gz /camera/image → ROS /image_raw (Image)
+    5. lidar_bridge    – gz /scan           → ROS /scan      (LaserScan)
+    6. odom_bridge     – gz /odom           → ROS /odom      (Odometry)
+    7. cmd_vel_bridge  – ROS /cmd_vel       → gz /cmd_vel    (Twist)
+    8. camera_bridge   – gz /camera/image   → ROS /image_raw (Image)
+       model_tf_bridge – gz /model/pioneer/tf → ROS /tf
+       base_link_tf    – static: pioneer/base_link → base_link
+       laser_tf        – static: pioneer/base_link/laser → laser_frame
 
   What to test after launching:
-    ros2 topic list                      # should show /scan /odom /image_raw
-    ros2 topic echo /scan --once         # ranges array should have data
-    ros2 topic echo /odom --once         # position should be ~(0,0,0)
-    ros2 run tf2_tools view_frames       # odom→base_link→laser_frame chain
+    ros2 topic list                      # should show /scan /odom /map /image_raw
+    ros2 topic echo /map --once          # occupancy grid with data
+    rviz2 → add Map (/map) + LaserScan (/scan) to see SLAM building live
+    Drive with gamepad (L1 + left stick) and watch map grow
 
 Stages to add next:
-  Stage 2  + slam_toolbox
   Stage 3  + mission_manager + safety_monitor
   Stage 4  + Nav2
   Stage 5  + velocity_safety_filter
@@ -47,12 +52,14 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    pkg_p3  = get_package_share_directory('part3_explore')
-    pkg_p1  = get_package_share_directory('p3at')
-    pkg_gz  = get_package_share_directory('ros_gz_sim')
+    pkg_p3   = get_package_share_directory('part3_explore')
+    pkg_p1   = get_package_share_directory('p3at')
+    pkg_gz   = get_package_share_directory('ros_gz_sim')
+    pkg_slam = get_package_share_directory('slam_toolbox')
 
     world_sdf   = os.path.join(pkg_p3, 'worlds', 'part3_world.sdf')
     robot_urdf  = os.path.join(pkg_p1, 'urdf',   'pioneer.urdf')
+    slam_params = os.path.join(pkg_p3, 'config',  'slam_params_sim.yaml')
 
     with open(robot_urdf, 'r') as f:
         robot_description = f.read()
@@ -93,6 +100,7 @@ def generate_launch_description():
     )
 
     # 4. Spawn Pioneer into Gazebo at arena centre
+    #    z=0.1 so robot sits on ground instead of clipping through it
     robot_spawn = ExecuteProcess(
         cmd=[
             'ros2', 'run', 'ros_gz_sim', 'create',
@@ -148,6 +156,48 @@ def generate_launch_description():
         output='screen',
     )
 
+    # Bridge Gazebo's model TF into ROS
+    # The DiffDrive plugin publishes odom → pioneer/base_link on the
+    # model-specific topic /model/pioneer/tf, NOT on the global /tf.
+    # [ means gz→ros only (one direction).
+    # Remapped to /tf so it enters the ROS TF tree normally.
+    model_tf_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='model_tf_bridge',
+        arguments=['/model/pioneer/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V'],
+        remappings=[('/model/pioneer/tf', '/tf')],
+        output='screen',
+    )
+
+    # Gazebo names frames as  model_name/link_name  →  pioneer/base_link
+    # Our URDF and all ROS nodes expect just  base_link.
+    # This static identity transform bridges the two names so the TF chain
+    # odom → pioneer/base_link → base_link → chassis → laser_frame works.
+    base_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_link_tf',
+        arguments=['0', '0', '0', '0', '0', '0',
+                   'pioneer/base_link', 'base_link'],
+        output='screen',
+    )
+
+    # /scan arrives with frame_id = pioneer/base_link/laser (Gazebo naming).
+    # SLAM looks up this frame in TF to find where the lidar is on the robot.
+    # Our TF tree has laser_frame (from URDF), not pioneer/base_link/laser.
+    # This identity transform tells TF they are the same physical point.
+    laser_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='laser_tf',
+        arguments=['0', '0', '0', '0', '0', '0',
+                   'pioneer/base_link/laser', 'laser_frame'],
+        output='screen',
+    )
+
+
+
     return LaunchDescription([
         gz_resource,
         ign_resource,
@@ -159,4 +209,8 @@ def generate_launch_description():
         odom_bridge,
         cmd_vel_bridge,
         camera_bridge,
+        model_tf_bridge,
+        base_link_tf,
+        laser_tf,
+      
     ])
