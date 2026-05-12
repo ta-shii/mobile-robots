@@ -4,31 +4,30 @@ sim.launch.py  –  Incremental simulation launch
 Built up stage by stage to match the Week 1 test plan.
 Each stage is tested and committed before the next is added.
 
-Current stage: 2 — + SLAM + manual teleop
+Current stage: 2 — + SLAM + wander coverage + RViz
   Everything from Stage 1 plus:
     9.  slam_toolbox (online async) – builds /map from /scan + /odom
-   10.  joy_node                    – reads PS4 gamepad, publishes /joy
-   11.  teleop_twist_joy            – converts /joy → /cmd_vel
-                                      (hold L1 to enable driving)
+   10.  wander         – lawnmower coverage driver (8 strips, 15×15 m arena)
+   11.  rviz2          – Map + LaserScan + RobotModel
 
-  Stage 1 recap:
+  Stage 1 recap (infrastructure):
     1. Gazebo          – physics sim with part3_world.sdf
-    2. robot_state_pub – TF tree from URDF (base_link → laser_frame etc.)
-    3. joint_state_pub – wheel joint states for URDF
-    4. robot_spawn     – drops Pioneer into Gazebo at (0, 0, 0.1)
-    5. lidar_bridge    – gz /scan           → ROS /scan      (LaserScan)
-    6. odom_bridge     – gz /odom           → ROS /odom      (Odometry)
-    7. cmd_vel_bridge  – ROS /cmd_vel       → gz /cmd_vel    (Twist)
-    8. camera_bridge   – gz /camera/image   → ROS /image_raw (Image)
+    2. robot_state_pub – TF tree from URDF
+    3. joint_state_pub – wheel joint states
+    4. robot_spawn     – Pioneer at (0, 0, 0)
+    5. lidar_bridge    – gz /scan          → ROS /scan
+    6. odom_bridge     – gz /odom          → ROS /odom
+    7. cmd_vel_bridge  – ROS /cmd_vel      → gz /cmd_vel
+    8. camera_bridge   – gz /camera/image  → ROS /image_raw
        model_tf_bridge – gz /model/pioneer/tf → ROS /tf
        base_link_tf    – static: pioneer/base_link → base_link
-       laser_tf        – static: pioneer/base_link/laser → laser_frame
+       laser_tf        – static: pioneer/base_link/laser (offset 0.2/0/0.104)
 
   What to test after launching:
-    ros2 topic list                      # should show /scan /odom /map /image_raw
-    ros2 topic echo /map --once          # occupancy grid with data
-    rviz2 → add Map (/map) + LaserScan (/scan) to see SLAM building live
-    Drive with gamepad (L1 + left stick) and watch map grow
+    ros2 topic list                       # /scan /odom /map /image_raw
+    ros2 topic hz /map                    # ~0.1 Hz
+    ros2 topic hz /cmd_vel                # ~10 Hz (wander driving)
+    rviz2 → Map (/map) + LaserScan (/scan), fixed frame = map
 
 Stages to add next:
   Stage 3  + mission_manager + safety_monitor
@@ -59,7 +58,7 @@ def generate_launch_description():
 
     world_sdf   = os.path.join(pkg_p3, 'worlds', 'part3_world.sdf')
     robot_urdf  = os.path.join(pkg_p1, 'urdf',   'pioneer.urdf')
-    slam_params = os.path.join(pkg_p3, 'config',  'slam_params_sim.yaml')
+    slam_params = os.path.join(pkg_p3, 'config', 'slam_params_sim.yaml')
 
     with open(robot_urdf, 'r') as f:
         robot_description = f.read()
@@ -184,19 +183,60 @@ def generate_launch_description():
     )
 
     # /scan arrives with frame_id = pioneer/base_link/laser (Gazebo naming).
-    # SLAM looks up this frame in TF to find where the lidar is on the robot.
-    # Our TF tree has laser_frame (from URDF), not pioneer/base_link/laser.
-    # This identity transform tells TF they are the same physical point.
+    # SLAM looks up base_link → pioneer/base_link/laser in TF to place each
+    # scan hit in the correct spot on the map.
+    # We publish pioneer/base_link/laser as a child of pioneer/base_link at
+    # the same offset the URDF puts laser_frame under chassis (0.2m fwd, 0.104m up).
+    # This puts pioneer/base_link/laser in the connected tree:
+    #   odom → pioneer/base_link → pioneer/base_link/laser   ✓
     laser_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='laser_tf',
-        arguments=['0', '0', '0', '0', '0', '0',
-                   'pioneer/base_link/laser', 'laser_frame'],
+        arguments=['0.2', '0', '0.104', '0', '0', '0',
+                   'pioneer/base_link', 'pioneer/base_link/laser'],
         output='screen',
     )
 
+    # Stage 2: SLAM + manual teleop
 
+    # 9. slam_toolbox – builds /map from /scan + /odom
+    #    online_async = processes scans as they arrive (no batch post-processing)
+    #    slam_params_sim.yaml has use_sim_time=true and base_frame=base_link
+    slam_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_slam, 'launch', 'online_async_launch.py')
+        ),
+        launch_arguments={
+            'use_sim_time':     'true',
+            'slam_params_file': slam_params,
+        }.items(),
+    )
+
+    # 10. Wander – reactive obstacle-avoidance driver for map building
+    #     Drives straight until something is within SLOW_DIST, then steers away.
+    #     Replaces gamepad teleop in sim (no PS4 controller available).
+    #     Will be replaced by Nav2 + explorer in Stage 4/6.
+    wander_node = Node(
+        package='part3_explore',
+        executable='wander',
+        name='wander',
+        output='screen',
+        parameters=[{'use_sim_time': False}],
+    )
+
+    # 11. RViz2 – visualiser with pre-configured layout
+    #     Shows: map (occupancy grid), laser scan, robot model
+    #     Fixed frame = map so everything is in the SLAM map frame
+    rviz_config = os.path.join(pkg_p3, 'config', 'sim_rviz.rviz')
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config],
+        parameters=[{'use_sim_time': True}],
+        output='screen',
+    )
 
     return LaunchDescription([
         gz_resource,
@@ -212,5 +252,8 @@ def generate_launch_description():
         model_tf_bridge,
         base_link_tf,
         laser_tf,
-      
+        # Stage 2
+        slam_launch,
+        wander_node,
+        rviz_node,
     ])

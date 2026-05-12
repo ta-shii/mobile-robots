@@ -12,7 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml') + glob('config/*.rviz')),
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*.sdf')),
     ],
     install_requires=['setuptools'],
@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'mission_manager = part3_explore.mission_manager:main',
             'safety_monitor  = part3_explore.safety_monitor:main',
+            'wander          = part3_explore.wander:main',
         ],
     },
 )
