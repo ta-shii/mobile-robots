@@ -1,0 +1,466 @@
+<?xml version="1.0" ?>
+<!--
+  part3_world.sdf  –  Part 3 simulation environment
+  
+  15 × 15 m search area, origin (0,0) = robot home position.
+  Area runs from (-7.5, -7.5) to (+7.5, +7.5).
+
+  Contents:
+    - Ground plane (grass colour)
+    - 4 boundary walls at the perimeter (±7.5 m)
+    - 6 Greek-letter boards placed near the boundary, facing INWARD
+        Each board is a white panel (0.4 × 0.05 × 0.6 m) at knee height
+        with a coloured sphere on top for sim identification.
+        Letters: alpha(purple)  beta(cyan)  gamma(orange)
+                 delta(pink)    epsilon(lime)  zeta(blue)
+    - 2 YELLOW blocks   – targets for color_detector (HSV hue ~55-65°)
+    - 2 RED cones       – targets for color_detector (HSV hue ~0-10°)
+    - 3 static wall obstacles – force Nav2 to plan around them (commented out atm)
+    - 1 moving actor          – triggers safety_monitor e-stop when < 1 m (commented out atm)
+
+  Board orientation (facing inward):
+    North/South wall boards  yaw = 0       (thin edge against wall, face toward Y-centre)
+    East/West  wall boards   yaw = 1.5708  (thin edge against wall, face toward X-centre)
+
+  Board layout (top view):
+                -7.5            0            +7.5
+         +7.5   +---[ALPHA]---[BETA]-----------+
+                |                              |
+                |                         [GAMMA]
+                |                              |
+           0    |                              |
+                |                         [DELTA]
+                |                              |
+         -7.5  [ZETA]       [EPSILON]----------+
+
+  Sim vs real-robot notes:
+    * Actors do NOT appear on the simulated lidar.  To test the e-stop in sim,
+      inject a fake close-range scan:
+        ros2 topic pub /scan sensor_msgs/msg/LaserScan \
+          "{header: {frame_id: laser_frame}, range_min: 0.1, range_max: 20.0,
+            angle_min: -3.14, angle_max: 3.14, angle_increment: 0.01,
+            ranges: [0.5, 0.5, 0.5, 0.5, 0.5]}" --once
+    * Greek-letter OCR is not tested in sim – boards carry coloured spheres
+      instead.  OCR is tested with real photos on the physical robot.
+-->
+<sdf version="1.8">
+  <world name="part3_world">
+
+    <!-- ============================================================
+         World plugins
+    ============================================================ -->
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin filename="libgz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="libgz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="libgz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="libgz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+    <plugin filename="libgz-sim-sensors-system.so"
+            name="gz::sim::systems::Sensors"/>
+    <plugin filename="libgz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- ============================================================
+         Lighting
+    ============================================================ -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ============================================================
+         Ground plane (grass colour)
+    ============================================================ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>50 50</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 0.1 1</ambient>
+            <diffuse>0.2 0.5 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         Boundary walls  (15 × 15 m perimeter)
+         0.1 m thick, 0.5 m tall – give SLAM good loop-closure features.
+    ============================================================ -->
+
+    <!-- North wall  y = +7.5 -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 7.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>15 0.1 0.5</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>15 0.1 0.5</size></box></geometry>
+          <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- South wall  y = -7.5 -->
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -7.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>15 0.1 0.5</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>15 0.1 0.5</size></box></geometry>
+          <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East wall  x = +7.5 -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>7.5 0 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.1 15 0.5</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.1 15 0.5</size></box></geometry>
+          <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West wall  x = -7.5 -->
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-7.5 0 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.1 15 0.5</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.1 15 0.5</size></box></geometry>
+          <material><ambient>0.6 0.4 0.2 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         Greek-letter boards  (6 total, near boundary walls, facing inward)
+
+         Panel geometry: 0.4 m wide x 0.05 m deep x 0.6 m tall
+         Panel centre height: 0.3 m (knee height per brief)
+         Marker sphere at 0.75 m – colour-coded for sim identification
+    ============================================================ -->
+
+    <!-- ALPHA – north wall, left  (-3, 6.8)   marker: purple -->
+    <model name="board_alpha">
+      <static>true</static>
+      <pose>-3 6.8 0 0 0 0</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>0.5 0 0.8 1</ambient><diffuse>0.5 0 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- BETA – north wall, right  (+3, 6.8)   marker: cyan -->
+    <model name="board_beta">
+      <static>true</static>
+      <pose>3 6.8 0 0 0 0</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>0 0.8 0.8 1</ambient><diffuse>0 0.8 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- GAMMA – east wall, upper  (+6.8, +3)  marker: orange  (yaw 90° so face points west/inward) -->
+    <model name="board_gamma">
+      <static>true</static>
+      <pose>6.8 3 0 0 0 1.5708</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>1 0.5 0 1</ambient><diffuse>1 0.5 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- DELTA – east wall, lower  (+6.8, -3)  marker: pink  (yaw 90°) -->
+    <model name="board_delta">
+      <static>true</static>
+      <pose>6.8 -3 0 0 0 1.5708</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>1 0.4 0.7 1</ambient><diffuse>1 0.4 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- EPSILON – south wall, centre  (0, -6.8)  marker: lime -->
+    <model name="board_epsilon">
+      <static>true</static>
+      <pose>0 -6.8 0 0 0 0</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>0.4 0.9 0 1</ambient><diffuse>0.4 0.9 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ZETA – west wall, centre  (-6.8, 0)  marker: blue  (yaw 90°) -->
+    <model name="board_zeta">
+      <static>true</static>
+      <pose>-6.8 0 0 0 0 1.5708</pose>
+      <link name="panel">
+        <pose>0 0 0.3 0 0 0</pose>
+        <collision name="c"><geometry><box><size>0.4 0.05 0.6</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.4 0.05 0.6</size></box></geometry>
+          <material><ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="marker">
+        <pose>0 0 0.75 0 0 0</pose>
+        <visual name="v">
+          <geometry><sphere><radius>0.1</radius></sphere></geometry>
+          <material><ambient>0 0.3 1 1</ambient><diffuse>0 0.3 1 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         YELLOW blocks (2x)
+         Box-shaped, bright yellow.  HSV hue ~55-65 degrees.
+         color_detector.py default YELLOW range is hue 25-35 (outdoor yellow).
+         For sim, widen upper hue to 65 if blocks appear more green-yellow.
+    ============================================================ -->
+
+    <model name="yellow_block_1">
+      <static>true</static>
+      <pose>1 -4 0.35 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.5 0.5 0.7</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.5 0.5 0.7</size></box></geometry>
+          <material>
+            <ambient>1.0 0.85 0.0 1</ambient>
+            <diffuse>1.0 0.85 0.0 1</diffuse>
+            <specular>0.3 0.3 0.0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="yellow_block_2">
+      <static>true</static>
+      <pose>-5 2 0.35 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.5 0.5 0.7</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.5 0.5 0.7</size></box></geometry>
+          <material>
+            <ambient>1.0 0.85 0.0 1</ambient>
+            <diffuse>1.0 0.85 0.0 1</diffuse>
+            <specular>0.3 0.3 0.0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         RED cones (2x)
+         Traffic-cone shape: wide base cylinder + narrow top cylinder.
+         SDF 1.8 has no native cone primitive, so two cylinders approximate it.
+         HSV hue ~0-10 degrees.
+    ============================================================ -->
+
+    <model name="red_cone_1">
+      <static>true</static>
+      <pose>6 1 0 0 0 0</pose>
+      <link name="base">
+        <pose>0 0 0.15 0 0 0</pose>
+        <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.3</length></cylinder></geometry></collision>
+        <visual name="v">
+          <geometry><cylinder><radius>0.22</radius><length>0.3</length></cylinder></geometry>
+          <material><ambient>0.9 0.05 0.05 1</ambient><diffuse>0.9 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="top">
+        <pose>0 0 0.5 0 0 0</pose>
+        <collision name="c"><geometry><cylinder><radius>0.08</radius><length>0.4</length></cylinder></geometry></collision>
+        <visual name="v">
+          <geometry><cylinder><radius>0.08</radius><length>0.4</length></cylinder></geometry>
+          <material><ambient>0.9 0.05 0.05 1</ambient><diffuse>0.9 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="red_cone_2">
+      <static>true</static>
+      <pose>-2 -5 0 0 0 0</pose>
+      <link name="base">
+        <pose>0 0 0.15 0 0 0</pose>
+        <collision name="c"><geometry><cylinder><radius>0.22</radius><length>0.3</length></cylinder></geometry></collision>
+        <visual name="v">
+          <geometry><cylinder><radius>0.22</radius><length>0.3</length></cylinder></geometry>
+          <material><ambient>0.9 0.05 0.05 1</ambient><diffuse>0.9 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="top">
+        <pose>0 0 0.5 0 0 0</pose>
+        <collision name="c"><geometry><cylinder><radius>0.08</radius><length>0.4</length></cylinder></geometry></collision>
+        <visual name="v">
+          <geometry><cylinder><radius>0.08</radius><length>0.4</length></cylinder></geometry>
+          <material><ambient>0.9 0.05 0.05 1</ambient><diffuse>0.9 0.05 0.05 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         Static wall obstacles (3x) – COMMENTED OUT for now
+         Uncomment if reuired.
+    ============================================================ -->
+
+    <!--
+    <model name="obs_wall_1">
+      <static>true</static>
+      <pose>0 3 0.5 0 0 0.7</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>2.0 0.15 1.0</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>2.0 0.15 1.0</size></box></geometry>
+          <material><ambient>0.45 0.3 0.15 1</ambient><diffuse>0.45 0.3 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_wall_2">
+      <static>true</static>
+      <pose>-1 -2 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>2.5 0.15 1.0</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>2.5 0.15 1.0</size></box></geometry>
+          <material><ambient>0.45 0.3 0.15 1</ambient><diffuse>0.45 0.3 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obs_wall_3">
+      <static>true</static>
+      <pose>4 5 0.5 0 0 0.3</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1.5 0.15 1.0</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>1.5 0.15 1.0</size></box></geometry>
+          <material><ambient>0.45 0.3 0.15 1</ambient><diffuse>0.45 0.3 0.15 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    -->
+
+    <!-- ============================================================
+         Moving obstacle (actor with scripted trajectory) - commented out for now
+         Walks back and forth through the centre of the arena.
+
+         NOTE: Gz-sim actors do NOT appear on the simulated lidar by default.
+         To test safety_monitor e-stop in simulation inject a fake scan:
+           ros2 topic pub /scan sensor_msgs/msg/LaserScan \
+             "{header: {frame_id: laser_frame}, range_min: 0.1, range_max: 20.0,
+               angle_min: -3.14, angle_max: 3.14, angle_increment: 0.01,
+               ranges: [0.5, 0.5, 0.5, 0.5, 0.5]}" --once
+    ============================================================ -->
+    <!--
+     Actor model from Gazebo Fuel:  https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip
+     Animation:  https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/talk_b.dae
+    <actor name="moving_obstacle">
+      <pose>-2 0 0.5 0 0 0</pose>
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/talk_b.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/talk_b.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <waypoint><time>0</time>  <pose>-2  0 0.5 0 0 0</pose></waypoint>
+          <waypoint><time>6</time>  <pose> 2  0 0.5 0 0 0</pose></waypoint>
+          <waypoint><time>12</time> <pose>-2  0 0.5 0 0 0</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+    -->
+
+  </world>
+</sdf>
