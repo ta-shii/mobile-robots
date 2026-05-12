@@ -22,6 +22,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String, Bool
 
 
 # Arena / pattern constants 
@@ -54,6 +55,8 @@ class Wander(Node):
         self._x   = 0.0
         self._y   = 0.0
         self._yaw = 0.0
+        self._mission_state = 'IDLE'   # robot stays still until MAPPING
+        self._estop = False            # mirrors /estop/triggered
 
         # Build the strip list: alternating east (+X) and west (-X) sweeps
         self._strips = self._build_strips()
@@ -62,8 +65,10 @@ class Wander(Node):
         self._blocked = False
 
         self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.create_subscription(LaserScan, '/scan', self._scan_cb, 10)
-        self.create_subscription(Odometry,  '/odom', self._odom_cb, 10)
+        self.create_subscription(LaserScan, '/scan',          self._scan_cb,    10)
+        self.create_subscription(Odometry,  '/odom',          self._odom_cb,    10)
+        self.create_subscription(String,    '/mission/state',  self._mission_cb, 10)
+        self.create_subscription(Bool,      '/estop/triggered', self._estop_cb,  10)
         self.create_timer(0.1, self._tick)
 
         self.get_logger().info(
@@ -85,7 +90,20 @@ class Wander(Node):
             going_east = not going_east
         return strips
 
-    # Sensor callbacks
+    # Sensor / state callbacks
+
+    def _mission_cb(self, msg: String):
+        prev = self._mission_state
+        self._mission_state = msg.data
+        if prev != msg.data:
+            self.get_logger().info(f'mission state → {msg.data}')
+
+    def _estop_cb(self, msg: Bool):
+        if msg.data and not self._estop:
+            self.get_logger().warn('wander: estop active — stopping')
+        elif not msg.data and self._estop:
+            self.get_logger().info('wander: estop cleared — resuming')
+        self._estop = msg.data
 
     def _scan_cb(self, msg: LaserScan):
         total = len(msg.ranges)
@@ -112,6 +130,16 @@ class Wander(Node):
 
     def _tick(self):
         cmd = Twist()
+
+        # Gate 1: only drive when mission is MAPPING
+        if self._mission_state != 'MAPPING':
+            self.pub.publish(cmd)
+            return
+
+        # Gate 2: yield to safety_monitor when estop is active
+        if self._estop:
+            self.pub.publish(cmd)   # publish zero — safety_monitor also sending zeros
+            return
 
         if self._state == DONE:
             self.pub.publish(cmd)

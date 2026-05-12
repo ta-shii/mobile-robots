@@ -4,11 +4,13 @@ sim.launch.py  –  Incremental simulation launch
 Built up stage by stage to match the Week 1 test plan.
 Each stage is tested and committed before the next is added.
 
-Current stage: 2 — + SLAM + wander coverage + RViz
-  Everything from Stage 1 plus:
-    9.  slam_toolbox (online async) – builds /map from /scan + /odom
-   10.  wander         – lawnmower coverage driver (8 strips, 15×15 m arena)
-   11.  rviz2          – Map + LaserScan + RobotModel
+Current stage: 3 — + mission_manager + safety_monitor
+  Everything from Stage 2 plus:
+   12.  mission_manager  – state machine IDLE→MAPPING→RAPID_NAV
+                           publishes /mission/state at 5 Hz
+                           robot stays still until MAPPING is triggered
+   13.  safety_monitor   – stops robot if obstacle within 0.5 m
+                           publishes /estop/triggered + zeroes /cmd_vel
 
   Stage 1 recap (infrastructure):
     1. Gazebo          – physics sim with part3_world.sdf
@@ -23,14 +25,18 @@ Current stage: 2 — + SLAM + wander coverage + RViz
        base_link_tf    – static: pioneer/base_link → base_link
        laser_tf        – static: pioneer/base_link/laser (offset 0.2/0/0.104)
 
+  Stage 2 recap (SLAM + coverage):
+    9.  slam_toolbox   – builds /map from /scan + /odom
+   10.  wander         – lawnmower coverage (gated by /mission/state)
+   11.  rviz2          – Map + LaserScan + RobotModel
+
   What to test after launching:
-    ros2 topic list                       # /scan /odom /map /image_raw
-    ros2 topic hz /map                    # ~0.1 Hz
-    ros2 topic hz /cmd_vel                # ~10 Hz (wander driving)
-    rviz2 → Map (/map) + LaserScan (/scan), fixed frame = map
+    ros2 topic echo /mission/state --once   # should print IDLE, robot stationary
+    ros2 service call /start_mapping_phase std_srvs/srv/Trigger {}
+    ros2 topic echo /mission/state --once   # should print MAPPING, robot starts
+    ros2 topic echo /estop/incident_log     # watch for safety events near walls
 
 Stages to add next:
-  Stage 3  + mission_manager + safety_monitor
   Stage 4  + Nav2
   Stage 5  + velocity_safety_filter
   Stage 6  + explorer + waypoint_driver
@@ -59,6 +65,7 @@ def generate_launch_description():
     world_sdf   = os.path.join(pkg_p3, 'worlds', 'part3_world.sdf')
     robot_urdf  = os.path.join(pkg_p1, 'urdf',   'pioneer.urdf')
     slam_params = os.path.join(pkg_p3, 'config', 'slam_params_sim.yaml')
+    p3_params   = os.path.join(pkg_p3, 'config', 'part3_params.yaml')
 
     with open(robot_urdf, 'r') as f:
         robot_description = f.read()
@@ -238,6 +245,35 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ── Stage 3: mission_manager + safety_monitor ──────────────────────────
+
+    # 12. mission_manager — state machine, starts in IDLE.
+    #     Wander will NOT drive until operator triggers MAPPING via service call:
+    #       ros2 service call /start_mapping_phase std_srvs/srv/Trigger {}
+    #     Publishes /mission/state at 5 Hz → consumed by wander + safety_monitor.
+    mission_manager = Node(
+        package='part3_explore',
+        executable='mission_manager',
+        name='mission_manager',
+        parameters=[p3_params, {'use_sim_time': False}],
+        output='screen',
+    )
+
+    # 13. safety_monitor — watches /scan every callback.
+    #     Active only when mission != IDLE.
+    #     When any beam < DANGER_RADIUS (0.5 m):
+    #       • publishes True on /estop/triggered → mission_manager logs it
+    #       • publishes Twist(0) on /cmd_vel at 20 Hz → overrides wander motion
+    #     NOTE: cmd_vel arbitration (safety vs wander) is properly resolved in
+    #     Stage 5 by velocity_safety_filter. For now safety_monitor wins by rate.
+    safety_monitor = Node(
+        package='part3_explore',
+        executable='safety_monitor',
+        name='safety_monitor',
+        parameters=[p3_params, {'use_sim_time': False}],
+        output='screen',
+    )
+
     return LaunchDescription([
         gz_resource,
         ign_resource,
@@ -256,4 +292,7 @@ def generate_launch_description():
         slam_launch,
         wander_node,
         rviz_node,
+        # Stage 3
+        mission_manager,
+        safety_monitor,
     ])
