@@ -31,6 +31,7 @@ Topics subscribed
 """
 
 import math
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -41,6 +42,7 @@ from std_msgs.msg import String, Bool
 
 CLUSTER_RADIUS    = 1.0   # m  – merge frontier cells within this distance
 MIN_FRONTIER_DIST = 0.8   # m  – skip frontiers closer than this (already nearby)
+GOAL_TIMEOUT      = 60.0  # s  – abandon goal if Nav2 hasn't acked within this time
 
 
 class Explorer(Node):
@@ -55,6 +57,7 @@ class Explorer(Node):
         self._waiting_for_ack   = False   # True after publishing a goal, before wp_reached
         self._done              = False
         self._goal_count        = 0
+        self._goal_sent_time    = 0.0     # wall-clock time when last goal was published
 
         # Publishers
         self.target_pub   = self.create_publisher(PoseStamped, '/explorer/target_pose', 10)
@@ -104,7 +107,13 @@ class Explorer(Node):
         if self._mission_state != 'MAPPING':
             return
         if self._waiting_for_ack:
-            return
+            elapsed = time.monotonic() - self._goal_sent_time
+            if elapsed < GOAL_TIMEOUT:
+                return
+            self.get_logger().warn(
+                f'explorer: goal {self._goal_count} timed out after '
+                f'{elapsed:.0f} s — skipping to next frontier')
+            self._waiting_for_ack = False
         if self._done:
             return
         if self._map is None:
@@ -152,6 +161,7 @@ class Explorer(Node):
 
         self._publish_target(nearest[0], nearest[1])
         self._waiting_for_ack = True
+        self._goal_sent_time  = time.monotonic()
 
         p = String()
         p.data = (
