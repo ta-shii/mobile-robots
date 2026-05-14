@@ -71,13 +71,13 @@ class MovingObstacleMonitor(Node):
     # ------------------------------------------------------------------
     def _state_cb(self, msg: String):
         self.mission_state = msg.data
-        if msg.data == 'IDLE':
-            # Clear e-stop when operator resets to IDLE
+        if msg.data != 'RAPID_NAV':
+            # Clear e-stop whenever we leave RAPID_NAV (entering IDLE or MAPPING)
             self._set_estop(False)
 
     def _scan_cb(self, msg: LaserScan):
-        # Only check when robot is active
-        if self.mission_state == 'IDLE':
+        # Only active during RAPID_NAV — Nav2 costmap handles obstacles during MAPPING
+        if self.mission_state != 'RAPID_NAV':
             return
 
         # Replace inf/nan with max range

@@ -4,13 +4,19 @@ sim.launch.py  –  Incremental simulation launch
 Built up stage by stage to match the Week 1 test plan.
 Each stage is tested and committed before the next is added.
 
-Current stage: 3 — + mission_manager + safety_monitor
-  Everything from Stage 2 plus:
-   12.  mission_manager  – state machine IDLE→MAPPING→RAPID_NAV
-                           publishes /mission/state at 5 Hz
-                           robot stays still until MAPPING is triggered
-   13.  safety_monitor   – stops robot if obstacle within 0.5 m
-                           publishes /estop/triggered + zeroes /cmd_vel
+Current stage: 4+6 — Nav2 + frontier explorer (merged)
+  Everything from Stage 3 plus:
+   10.  explorer        – frontier detection: reads /map, finds nearest
+                          unexplored boundary, publishes /explorer/target_pose
+   10b. waypoint_driver – bridges explorer → Nav2 NavigateToPose action
+                          (replaces wander; Nav2 costmap handles all obstacle avoidance)
+   14.  Nav2 core nodes – controller_server, planner_server, bt_navigator,
+                          behavior_server, waypoint_follower, lifecycle_manager
+                          (spawned directly, NOT via navigation_launch.py which
+                           also starts opennav_docking/route_server/etc. that
+                           crash on empty config and stall the lifecycle manager)
+
+  safety_monitor is now gated to RAPID_NAV only (not MAPPING).
 
   Stage 1 recap (infrastructure):
     1. Gazebo          – physics sim with part3_world.sdf
@@ -30,14 +36,17 @@ Current stage: 3 — + mission_manager + safety_monitor
    10.  wander         – lawnmower coverage (gated by /mission/state)
    11.  rviz2          – Map + LaserScan + RobotModel
 
+  Stage 3 recap (mission + safety):
+   12.  mission_manager  – IDLE→MAPPING gate, start with service call
+   13.  safety_monitor   – estop when beam < 0.5 m
+
   What to test after launching:
-    ros2 topic echo /mission/state --once   # should print IDLE, robot stationary
-    ros2 service call /start_mapping_phase std_srvs/srv/Trigger {}
-    ros2 topic echo /mission/state --once   # should print MAPPING, robot starts
-    ros2 topic echo /estop/incident_log     # watch for safety events near walls
+    ros2 node list | grep -E "bt|planner|controller"   # Nav2 nodes active
+    ros2 topic list | grep nav                         # /navigate_to_pose etc.
+    # In RViz: set fixed frame=map, add Nav2 goal tool, click a destination
+    # OR via command line (see test instructions)
 
 Stages to add next:
-  Stage 4  + Nav2
   Stage 5  + velocity_safety_filter
   Stage 6  + explorer + waypoint_driver
 """
@@ -64,8 +73,9 @@ def generate_launch_description():
 
     world_sdf   = os.path.join(pkg_p3, 'worlds', 'part3_world.sdf')
     robot_urdf  = os.path.join(pkg_p1, 'urdf',   'pioneer.urdf')
-    slam_params = os.path.join(pkg_p3, 'config', 'slam_params_sim.yaml')
-    p3_params   = os.path.join(pkg_p3, 'config', 'part3_params.yaml')
+    slam_params    = os.path.join(pkg_p3, 'config', 'slam_params_sim.yaml')
+    p3_params      = os.path.join(pkg_p3, 'config', 'part3_params.yaml')
+    nav2_params    = os.path.join(pkg_p3, 'config', 'nav2_params_sim.yaml')
 
     with open(robot_urdf, 'r') as f:
         robot_description = f.read()
@@ -220,14 +230,28 @@ def generate_launch_description():
         }.items(),
     )
 
-    # 10. Wander – reactive obstacle-avoidance driver for map building
-    #     Drives straight until something is within SLOW_DIST, then steers away.
-    #     Replaces gamepad teleop in sim (no PS4 controller available).
-    #     Will be replaced by Nav2 + explorer in Stage 4/6.
-    wander_node = Node(
+    # 10. Explorer – frontier-based coverage for map building
+    #     Finds the nearest unexplored boundary cell on /map and publishes it
+    #     as a goal to /explorer/target_pose.  waypoint_driver forwards it to
+    #     Nav2's NavigateToPose.  Nav2 handles all driving and obstacle avoidance
+    #     via its costmap — no separate reactive controller needed.
+    #     Only sends goals when /mission/state == MAPPING.
+    explorer_node = Node(
         package='part3_explore',
-        executable='wander',
-        name='wander',
+        executable='explorer',
+        name='explorer',
+        output='screen',
+        parameters=[{'use_sim_time': False}],
+    )
+
+    # waypoint_driver – bridges explorer (and mission_manager for RAPID_NAV)
+    #   to Nav2's NavigateToPose action server.
+    #   Subscribes to /explorer/target_pose → sends to Nav2 → acks /explorer/wp_reached
+    #   Subscribes to /phase2/target_pose   → sends to Nav2 → acks /phase2/wp_reached
+    waypoint_driver_node = Node(
+        package='part3_explore',
+        executable='waypoint_driver',
+        name='waypoint_driver',
         output='screen',
         parameters=[{'use_sim_time': False}],
     )
@@ -274,6 +298,105 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ── Stage 4: Nav2 ──────────────────────────────────────────────────────
+
+    # 14. Nav2 core nodes — spawned directly (not via navigation_launch.py).
+    #
+    #     navigation_launch.py in Nav2 Jazzy also starts opennav_docking,
+    #     route_server, smoother_server, velocity_smoother, collision_monitor
+    #     and hardcodes all of them in the lifecycle_manager node_names list.
+    #     opennav_docking crashes immediately if dock_plugins param is empty
+    #     (which it is when we have no docking hardware), and the lifecycle
+    #     manager then stalls forever waiting for docking_server/get_state,
+    #     leaving bt_navigator stuck in 'unconfigured' and /navigate_to_pose
+    #     never appearing.
+    #
+    #     Fix: bypass navigation_launch.py; start only the 5 core nodes.
+    #       controller_server  – local planner (DWB), publishes /cmd_vel
+    #       planner_server     – global planner (NavFn/A*), produces path
+    #       bt_navigator       – behaviour tree, sends goals to above two
+    #       behavior_server    – recovery behaviours (spin, backup, wait)
+    #       waypoint_follower  – sequences multiple waypoints
+    #       lifecycle_manager  – starts above 5 in correct order
+    #
+    #     Nav2 uses:
+    #       /map   (from slam_toolbox) → global costmap static layer
+    #       /scan  (from lidar)        → local + global costmap obstacle layer
+    #       /odom                      → odometry for local frame
+    #       map→odom TF (from slam_toolbox) → localisation
+    #
+    #     Nav2 publishes:
+    #       /cmd_vel  → our cmd_vel_bridge → Gazebo motors
+    #       (nav2_params_sim.yaml sets cmd_vel_topic: /cmd_vel)
+    #
+    #     NOTE: wander also publishes /cmd_vel but is gated to IDLE while Nav2
+    #     is being tested. Proper arbitration added in Stage 5.
+
+    nav2_params_file = nav2_params   # alias for clarity in Node() calls
+
+    nav2_controller = Node(
+        package='nav2_controller',
+        executable='controller_server',
+        name='controller_server',
+        output='screen',
+        parameters=[nav2_params_file],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+    )
+
+    nav2_planner = Node(
+        package='nav2_planner',
+        executable='planner_server',
+        name='planner_server',
+        output='screen',
+        parameters=[nav2_params_file],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+    )
+
+    nav2_behaviors = Node(
+        package='nav2_behaviors',
+        executable='behavior_server',
+        name='behavior_server',
+        output='screen',
+        parameters=[nav2_params_file],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+    )
+
+    nav2_bt = Node(
+        package='nav2_bt_navigator',
+        executable='bt_navigator',
+        name='bt_navigator',
+        output='screen',
+        parameters=[nav2_params_file],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+    )
+
+    nav2_waypoint = Node(
+        package='nav2_waypoint_follower',
+        executable='waypoint_follower',
+        name='waypoint_follower',
+        output='screen',
+        parameters=[nav2_params_file],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+    )
+
+    nav2_lifecycle = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_navigation',
+        output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'autostart':    True,
+            'node_names':   [
+                'controller_server',
+                'planner_server',
+                'behavior_server',
+                'bt_navigator',
+                'waypoint_follower',
+            ],
+        }],
+    )
+
     return LaunchDescription([
         gz_resource,
         ign_resource,
@@ -290,9 +413,17 @@ def generate_launch_description():
         laser_tf,
         # Stage 2
         slam_launch,
-        wander_node,
+        explorer_node,
+        waypoint_driver_node,
         rviz_node,
         # Stage 3
         mission_manager,
         safety_monitor,
+        # Stage 4
+        nav2_controller,
+        nav2_planner,
+        nav2_behaviors,
+        nav2_bt,
+        nav2_waypoint,
+        nav2_lifecycle,
     ])

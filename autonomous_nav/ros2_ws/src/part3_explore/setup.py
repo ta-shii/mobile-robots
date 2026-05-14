@@ -24,9 +24,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'mission_manager = part3_explore.mission_manager:main',
-            'safety_monitor  = part3_explore.safety_monitor:main',
-            'wander          = part3_explore.wander:main',
+            'mission_manager  = part3_explore.mission_manager:main',
+            'safety_monitor   = part3_explore.safety_monitor:main',
+            'explorer         = part3_explore.explorer:main',
+            'waypoint_driver  = part3_explore.waypoint_driver:main',
+            'wander           = part3_explore.wander:main',   # kept but not launched
         ],
     },
 )
