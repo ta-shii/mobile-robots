@@ -40,9 +40,12 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String, Bool
 
 
-CLUSTER_RADIUS    = 1.0   # m  – merge frontier cells within this distance
-MIN_FRONTIER_DIST = 0.8   # m  – skip frontiers closer than this (already nearby)
-GOAL_TIMEOUT      = 60.0  # s  – abandon goal if Nav2 hasn't acked within this time
+CLUSTER_RADIUS         = 1.0   # m  – merge frontier cells within this distance
+MIN_FRONTIER_DIST      = 0.8   # m  – skip frontiers closer than this (already nearby)
+GOAL_TIMEOUT           = 60.0  # s  – abandon goal if Nav2 hasn't acked within this time
+FAILURE_SKIP_RADIUS    = 1.5   # m  – don't re-send goals near a recently-failed position
+MAX_FAILED_POSITIONS   = 20    # keep at most this many failed positions in memory
+MAX_CONSECUTIVE_FAILS  = 5     # declare mapping done after this many back-to-back failures
 
 
 class Explorer(Node):
@@ -53,11 +56,14 @@ class Explorer(Node):
         self._map:      OccupancyGrid | None = None
         self._robot_x   = 0.0
         self._robot_y   = 0.0
-        self._mission_state     = 'IDLE'
-        self._waiting_for_ack   = False   # True after publishing a goal, before wp_reached
-        self._done              = False
-        self._goal_count        = 0
-        self._goal_sent_time    = 0.0     # wall-clock time when last goal was published
+        self._mission_state       = 'IDLE'
+        self._waiting_for_ack     = False   # True after publishing a goal, before wp_reached
+        self._done                = False
+        self._goal_count          = 0
+        self._goal_sent_time      = 0.0     # wall-clock time when last goal was published
+        self._last_goal: tuple | None = None          # (x, y) of the most recent goal
+        self._failed_positions: list  = []            # list of (x, y) that Nav2 couldn't reach
+        self._consecutive_failures    = 0             # back-to-back Nav2 failures
 
         # Publishers
         self.target_pub   = self.create_publisher(PoseStamped, '/explorer/target_pose', 10)
@@ -91,15 +97,31 @@ class Explorer(Node):
             self.get_logger().info(f'explorer: mission state → {msg.data}')
         if msg.data == 'MAPPING' and prev != 'MAPPING':
             # Re-entering MAPPING — reset so we start fresh
-            self._waiting_for_ack = False
-            self._done = False
-            self._goal_count = 0
+            self._waiting_for_ack     = False
+            self._done                = False
+            self._goal_count          = 0
+            self._failed_positions    = []
+            self._consecutive_failures = 0
 
     def _ack_cb(self, msg: Bool):
-        if msg.data and self._waiting_for_ack:
-            self._waiting_for_ack = False
+        if not self._waiting_for_ack:
+            return
+        self._waiting_for_ack = False
+        if msg.data:
+            # Nav2 succeeded — reset failure tracking
+            self._consecutive_failures = 0
             self.get_logger().info(
                 f'explorer: waypoint {self._goal_count} reached — searching next frontier')
+        else:
+            # Nav2 failed — blacklist this position so we don't immediately retry it
+            self._consecutive_failures += 1
+            if self._last_goal is not None:
+                self._failed_positions.append(self._last_goal)
+                if len(self._failed_positions) > MAX_FAILED_POSITIONS:
+                    self._failed_positions.pop(0)
+            self.get_logger().warn(
+                f'explorer: waypoint {self._goal_count} failed '
+                f'({self._consecutive_failures} consecutive) — blacklisting position')
 
     # ── Main tick ──────────────────────────────────────────────────────
 
@@ -120,6 +142,17 @@ class Explorer(Node):
             self.get_logger().info('explorer: waiting for /map...')
             return
 
+        # Stop if Nav2 has failed too many times in a row — remaining frontiers
+        # are likely all ghost frontiers from SLAM drift that are unreachable.
+        if self._consecutive_failures >= MAX_CONSECUTIVE_FAILS:
+            self.get_logger().info(
+                f'explorer: {self._consecutive_failures} consecutive failures '
+                f'— no reachable frontiers remain, mapping complete')
+            self._done = True
+            d = Bool(); d.data = True
+            self.done_pub.publish(d)
+            return
+
         frontiers = self._find_frontiers(self._map)
 
         if not frontiers:
@@ -129,6 +162,26 @@ class Explorer(Node):
             d.data = True
             self.done_pub.publish(d)
             return
+
+        # Remove frontiers that are too close to recently-failed positions.
+        # These are almost certainly phantom frontiers from SLAM drift that
+        # Nav2 can't plan to — skip them rather than looping on them.
+        if self._failed_positions:
+            frontiers = [
+                f for f in frontiers
+                if all(
+                    math.hypot(f[0] - fx, f[1] - fy) > FAILURE_SKIP_RADIUS
+                    for fx, fy in self._failed_positions
+                )
+            ]
+            if not frontiers:
+                self.get_logger().info(
+                    'explorer: all remaining frontiers are near failed positions — '
+                    'mapping complete')
+                self._done = True
+                d = Bool(); d.data = True
+                self.done_pub.publish(d)
+                return
 
         # Prefer frontiers far enough away to represent genuinely unexplored area.
         # If the map just started, all frontiers may be very close — in that case
@@ -159,6 +212,7 @@ class Explorer(Node):
             f'({nearest[0]:.2f}, {nearest[1]:.2f})  dist={dist:.2f} m  '
             f'clusters={len(frontiers)}')
 
+        self._last_goal       = (nearest[0], nearest[1])
         self._publish_target(nearest[0], nearest[1])
         self._waiting_for_ack = True
         self._goal_sent_time  = time.monotonic()

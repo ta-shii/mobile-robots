@@ -76,6 +76,7 @@ class WaypointDriver(Node):
         self._goal_in_flight = False   # True while Nav2 is executing a goal
         self._estop          = False
         self._current_phase  = None    # 'MAPPING' or 'RAPID_NAV'
+        self._pending_goal: PoseStamped | None = None  # goal queued while cancel is in flight
 
         # --- Publishers ---
         self.wp_reached_pub  = self.create_publisher(Bool, '/explorer/wp_reached', 10)
@@ -119,9 +120,16 @@ class WaypointDriver(Node):
         if self.mission_state not in ('MAPPING', 'RAPID_NAV'):
             return
         if self._goal_in_flight:
-            # Already navigating – cancel and replace with new target
+            # Already navigating — queue the new goal and cancel the current one.
+            # _send_goal will be called once the cancel is acknowledged, avoiding
+            # the race condition where Nav2 receives cancel + new goal simultaneously.
+            self._pending_goal = pose
             self._cancel_active_goal()
+            return
 
+        self._send_goal(pose)
+
+    def _send_goal(self, pose: PoseStamped):
         if not self._nav_client.wait_for_server(timeout_sec=3.0):
             self.get_logger().warn(
                 'Nav2 navigate_to_pose server not available – is Nav2 running?'
@@ -173,10 +181,11 @@ class WaypointDriver(Node):
             self.get_logger().info('Nav2: goal cancelled')
 
         else:
-            # Nav2 failed (e.g. no path found, robot stuck)
-            # Log and signal reached anyway so explorer doesn't hang forever.
+            # Nav2 failed (e.g. no path found, robot stuck).
+            # Publish False so the explorer knows this was a failure and can
+            # blacklist the goal position — not the same as a successful arrival.
             self.get_logger().warn(f'Nav2 goal failed (status={status}) – skipping waypoint')
-            b = Bool(); b.data = True
+            b = Bool(); b.data = False
             if self._current_phase == 'MAPPING':
                 self.wp_reached_pub.publish(b)
             else:
@@ -184,9 +193,17 @@ class WaypointDriver(Node):
 
     def _cancel_active_goal(self):
         if self._goal_handle is not None:
-            self._goal_handle.cancel_goal_async()
+            cancel_future = self._goal_handle.cancel_goal_async()
+            cancel_future.add_done_callback(self._on_cancel_done)
             self._goal_handle    = None
             self._goal_in_flight = False
+
+    def _on_cancel_done(self, future):
+        """Called once Nav2 acknowledges the cancel — now safe to send the pending goal."""
+        if self._pending_goal is not None:
+            pose = self._pending_goal
+            self._pending_goal = None
+            self._send_goal(pose)
 
 
 def main():
