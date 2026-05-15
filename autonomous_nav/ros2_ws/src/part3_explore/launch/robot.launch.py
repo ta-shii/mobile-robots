@@ -29,7 +29,7 @@ Usage
 
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -181,12 +181,15 @@ def generate_launch_description():
     # ── 7. m-explore (explore_lite) ─────────────────────────────────────────
     # Picks frontier goals and sends NavigateToPose to Nav2.
     # Controlled by mission_manager: cancels Nav2 goals on state change.
-    explore_node = Node(
-        package='explore_lite',
-        executable='explore',
-        name='explore',
-        output='screen',
-        parameters=[explore_params],
+    explore_node = TimerAction(
+        period=15.0,   # wait for SLAM to build initial map before exploring
+        actions=[Node(
+            package='explore_lite',
+            executable='explore',
+            name='explore',
+            output='screen',
+            parameters=[explore_params],
+        )],
     )
 
     # ── 8, 9, 10, 11. Our Part 3 nodes ──────────────────────────────────────
