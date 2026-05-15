@@ -1,70 +1,75 @@
 #!/usr/bin/env python3
 """
 safety_monitor.py
-Detects moving obstacles from Lidar and triggers a software e-stop if any
-moving object comes within 1 m of the robot.
+Detects MOVING obstacles from Lidar and triggers a software e-stop if one
+comes within DANGER_RADIUS (1 m, per project brief) of the robot.
 
 How it works
-  Lidar gives a 360° scan as a list of (angle, range) points every ~100ms.
-  To distinguish *moving* obstacles from static ones we use scan-to-scan
-  comparison in polar space:
+  A rolling buffer of the last BACKGROUND_SCANS scans is maintained.
+  For each incoming scan, per-beam background values are estimated as the
+  median of that beam across recent scans.
 
-  1. Keep a rolling window of the last N scans.
-  2. For each scan, compare each beam's range to the median of the same beam
-     across the window (the 'background').
-  3. If a beam is significantly *shorter* than background (something appeared),
-     and is within the danger radius, it's a moving obstacle event.
+  A beam is flagged as "close-moving" only when:
+    - Its range is within DANGER_RADIUS, AND
+    - It is significantly shorter than its background estimate
+      (by more than DELTA_THRESH).
 
-  This is a lightweight alternative to full object tracking (e.g. Kalman
-  filters) and works well for outdoor environments with sparse dynamic objects.
+  Static walls always match their own background → never trigger.
+  A person walking into the scan plane causes a sudden beam shortening
+  relative to background → triggers.
 
-  NOTE: static obstacles close to the robot will also trigger this.  That's
-  intentional – the brief says e-stop if *any* moving object comes within 1 m.
-  In practice, the lidar safety from Part 2 already prevents static collisions,
-  so close-range hits in MAPPING state are almost certainly dynamic.
+  MIN_BEAMS or more flagged beams → e-stop triggered.
+
+  Auto-clear: once no close-moving beams have been seen for CLEAR_SECS the
+  e-stop is lifted so the robot can resume without operator intervention.
+
+  Manual clear: entering IDLE state also clears the e-stop.
 
 Topics subscribed
   /scan                (sensor_msgs/LaserScan)
   /mission/state       (std_msgs/String)
 
 Topics published
-  /cmd_vel             (geometry_msgs/Twist)    – zero if e-stop active
   /estop/triggered     (std_msgs/Bool)          – True = e-stop active
   /estop/incident_log  (std_msgs/String)        – one-line log entry per event
 """
 
 import math
 import time
+import collections
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
-from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 
 
 class MovingObstacleMonitor(Node):
 
-    DANGER_RADIUS = 0.5   # metres – brief requirement
-    MIN_BEAMS     = 3     # minimum beams within radius to confirm (filters noise)
+    DANGER_RADIUS     = 1.0   # metres – e-stop if moving object within 1 m
+    DELTA_THRESH      = 0.30  # metres – beam must be this much shorter than background
+    MIN_BEAMS         = 1     # minimum flagged beams to confirm (filters noise)
+    BACKGROUND_SCANS  = 10    # rolling window depth for background estimation
+    CLEAR_SECS        = 3.0   # seconds of clear scans before auto-clearing e-stop
 
     def __init__(self):
         super().__init__('safety_monitor')
 
-        self.mission_state = 'IDLE'
-        self.estop_active  = False
+        self.mission_state  = 'IDLE'
+        self.estop_active   = False
+        self._last_close_t  = None   # wall-clock time of last triggered scan
+
+        # Rolling buffer: deque of lists, each list is one full scan (cleaned ranges)
+        self._scan_buffer: collections.deque = collections.deque(
+            maxlen=self.BACKGROUND_SCANS
+        )
 
         # --- Publishers ---
-        self.cmd_pub     = self.create_publisher(Twist,  '/cmd_vel',            10)
-        self.estop_pub   = self.create_publisher(Bool,   '/estop/triggered',    10)
-        self.log_pub     = self.create_publisher(String, '/estop/incident_log', 10)
+        self.estop_pub = self.create_publisher(Bool,   '/estop/triggered',    10)
+        self.log_pub   = self.create_publisher(String, '/estop/incident_log', 10)
 
         # --- Subscribers ---
         self.create_subscription(LaserScan, '/scan',          self._scan_cb,  10)
         self.create_subscription(String,    '/mission/state', self._state_cb, 10)
-
-        # Continuously publish zero cmd_vel at 20 Hz while e-stop is active
-        # so teleop cannot override it with non-zero commands.
-        self.create_timer(0.05, self._estop_hold)
 
         self.get_logger().info('MovingObstacleMonitor ready')
 
@@ -72,60 +77,104 @@ class MovingObstacleMonitor(Node):
     def _state_cb(self, msg: String):
         self.mission_state = msg.data
         if msg.data == 'IDLE':
-            # Clear e-stop when operator resets to IDLE
             self._set_estop(False)
 
+    # States where the safety monitor is active
+    ACTIVE_STATES = frozenset({'MAPPING', 'MANUAL_MAPPING', 'RAPID_NAV'})
+
     def _scan_cb(self, msg: LaserScan):
-        # Only check when robot is active
-        if self.mission_state == 'IDLE':
+        if self.mission_state not in self.ACTIVE_STATES:
             return
 
-        # Replace inf/nan with max range
         max_r = msg.range_max
         clean = [r if (math.isfinite(r) and r > 0) else max_r for r in msg.ranges]
 
-        # Count beams within danger radius.
-        # No background comparison needed — the brief says stop for ANY
-        # object within 1m whether moving or static, and whether robot
-        # is stationary or driving.
-        close_beams = sum(1 for r in clean if r < self.DANGER_RADIUS)
+        n_beams = len(clean)
 
-        if close_beams >= self.MIN_BEAMS and not self.estop_active:
-            self._trigger_estop(close_beams, msg.header.stamp)
+        # Build background from rolling buffer (need at least 2 prior scans)
+        if len(self._scan_buffer) >= 2:
+            # Per-beam median across buffer entries
+            background = [
+                _median([self._scan_buffer[k][i] for k in range(len(self._scan_buffer))])
+                for i in range(n_beams)
+            ]
+
+            # Count beams that are close AND significantly shorter than background
+            close_moving = sum(
+                1
+                for i in range(n_beams)
+                if (clean[i] < self.DANGER_RADIUS and
+                    background[i] - clean[i] > self.DELTA_THRESH)
+            )
+        else:
+            close_moving = 0
+
+        # Add this scan to the buffer AFTER computing (so it doesn't bias itself)
+        self._scan_buffer.append(clean)
+
+        now = time.monotonic()
+
+        self.get_logger().debug(
+            f'close_moving={close_moving}  buf_depth={len(self._scan_buffer)}'
+        )
+
+        if close_moving >= self.MIN_BEAMS:
+            self._last_close_t = now
+            if not self.estop_active:
+                self._trigger_estop(close_moving, msg.header.stamp)
+        elif self.estop_active:
+            if (self._last_close_t is not None and
+                    (now - self._last_close_t) >= self.CLEAR_SECS):
+                self.get_logger().info(
+                    f'Area clear for {self.CLEAR_SECS} s – auto-clearing e-stop'
+                )
+                self._set_estop(False)
 
     # ------------------------------------------------------------------
     def _trigger_estop(self, n_beams: int, stamp):
         self._set_estop(True)
 
-        # Stop the robot immediately
-        self.cmd_pub.publish(Twist())
-
         ts = time.strftime('%Y-%m-%d %H:%M:%S')
         log = String()
         log.data = (
             f'ESTOP {ts} | moving obstacle detected | '
-            f'{n_beams} beams within {self.DANGER_RADIUS} m'
+            f'{n_beams} beams within {self.DANGER_RADIUS} m '
+            f'(>{self.DELTA_THRESH} m closer than background)'
         )
         self.log_pub.publish(log)
         self.get_logger().warn(log.data)
 
-    def _estop_hold(self):
-        if self.estop_active:
-            self.cmd_pub.publish(Twist())
-
     def _set_estop(self, active: bool):
+        if active == self.estop_active:
+            return
         self.estop_active = active
         msg = Bool()
         msg.data = active
         self.estop_pub.publish(msg)
 
 
+# ---------------------------------------------------------------------------
+# Fast median without numpy dependency
+
+def _median(values: list) -> float:
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2.0
+
+
+# ---------------------------------------------------------------------------
+
 def main():
     rclpy.init()
     node = MovingObstacleMonitor()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
