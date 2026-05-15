@@ -35,9 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-joy \
     ros-jazzy-teleop-twist-joy \
+    ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-tf2 \
     ros-jazzy-tf2-ros \
     ros-jazzy-tf2-geometry-msgs \
+    ros-jazzy-tf2-sensor-msgs \
     ros-jazzy-geometry-msgs \
     ros-jazzy-nav-msgs \
     ros-jazzy-sensor-msgs \
@@ -56,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rviz2 \
     ros-jazzy-depthai-ros-v3 \
     ros-jazzy-robot-state-publisher \
+    ros-jazzy-joint-state-publisher \
     ros-jazzy-xacro \
     ros-jazzy-slam-toolbox \
     ros-jazzy-navigation2 \
@@ -64,6 +67,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rosbag2-storage-mcap \
     ros-jazzy-pcl-conversions \
     ros-jazzy-pcl-ros \
+    ros-jazzy-pcl-msgs \
+    ros-jazzy-vision-opencv \
+    ros-jazzy-image-transport \
+    ros-jazzy-depth-image-proc \
     && rm -rf /var/lib/apt/lists/*
 
 # Tesseract OCR with Greek language pack
@@ -89,6 +96,13 @@ RUN mkdir -p /workspace/autonomous_nav/ros2_ws/src && \
         /workspace/autonomous_nav/ros2_ws/src/lakibeam1_ros2 || \
     echo "WARNING: Lakibeam clone failed – add manually if needed"
 
+# m-explore ROS2 frontier exploration
+RUN mkdir -p /workspace/autonomous_nav/ros2_ws/src && \
+    git clone --depth 1 \
+        https://github.com/robo-friends/m-explore-ros2.git \
+        /workspace/autonomous_nav/ros2_ws/src/m-explore-ros2 || \
+    echo "WARNING: m-explore clone failed – add manually if needed"
+    
 # rosdep init
 RUN rosdep init || true && rosdep update || true
 

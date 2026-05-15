@@ -1,36 +1,28 @@
 services:
-  part2_nav:
+  part3_robot:
     build: .
-    image: pioneer_part2:latest
-    container_name: pioneer_part2
-    network_mode: host         # ROS2 DDS needs host networking
-    privileged: true           # Required for serial port + USB devices
+    image: g9_part3:latest
+    container_name: g9_part3_robot
+    network_mode: host
+    privileged: true
+
     environment:
       - ROS_DOMAIN_ID=9
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - DISPLAY=${DISPLAY:-:0}
-    volumes:
-      - /dev:/dev                                                         # Serial port (/dev/ttyUSB0) + USB camera
-      - ./part2_nav:/workspace/ros2_ws/src/part2_nav                     # Live-reload source during dev
-      - ./ariaNode:/workspace/ros2_ws/src/ariaNode
-      - ./photos:/tmp/cone_photos                                         # Persist cone photos to host
-      - /tmp/.X11-unix:/tmp/.X11-unix                                     # X11 for rviz (optional)
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0                                         # Pioneer serial connection
-    command: >
-      ros2 launch part2_nav part2.launch.py
-        waypoints_file:=/workspace/ros2_ws/src/part2_nav/config/waypoints.yaml
+      - LD_LIBRARY_PATH=/usr/local/lib
 
-  # Run ariaNode standalone (alternative to including in launch)
-  aria:
-    image: pioneer_part2:latest
-    container_name: aria_node
-    network_mode: host
-    privileged: true
-    environment:
-      - ROS_DOMAIN_ID=9
-      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - /dev:/dev
+      - ./ros2_ws/src/part3_explore:/workspace/autonomous_nav/ros2_ws/src/part3_explore
+      - ./ros2_ws/src/p3at:/workspace/autonomous_nav/ros2_ws/src/p3at
+      - ./ros2_ws/src/ariaNode:/workspace/autonomous_nav/ros2_ws/src/ariaNode
+      - ./ros2_ws/maps:/workspace/autonomous_nav/ros2_ws/maps
+      - ./logs:/workspace/autonomous_nav/logs
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0
-    command: ros2 run ariaNode ariaNode -rp /dev/ttyUSB0
-    profiles: ["aria"]         # Only start with: docker compose --profile aria up
+
+    command: >
+      ros2 launch part3_explore robot.launch.py
