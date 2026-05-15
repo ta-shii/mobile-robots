@@ -111,6 +111,7 @@ def generate_launch_description():
             'frame_id':     'laser_frame',
             'output_topic': 'scan',
         }],
+        arguments=['--ros-args', '--log-level', 'warn'],
     )
 
     # ── 5. SLAM Toolbox ─────────────────────────────────────────────────────
