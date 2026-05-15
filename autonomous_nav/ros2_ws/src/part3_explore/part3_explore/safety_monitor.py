@@ -77,12 +77,17 @@ class MovingObstacleMonitor(Node):
     def _state_cb(self, msg: String):
         prev = self.mission_state
         self.mission_state = msg.data
-        # Only clear estop on a genuine transition TO idle, not on every broadcast
+        if msg.data != prev:
+            # Clear stale background so old scan positions don't trigger false positives
+            self._scan_buffer.clear()
+            self._last_close_t = None
         if msg.data == 'IDLE' and prev != 'IDLE':
             self._set_estop(False)
 
-    # States where the safety monitor is active
-    ACTIVE_STATES = frozenset({'MAPPING', 'MANUAL_MAPPING', 'RAPID_NAV'})
+    # States where the safety monitor is active.
+    # MANUAL_MAPPING excluded – operator is in control and can see obstacles.
+    # Background comparison breaks when robot moves (walls shift in scan).
+    ACTIVE_STATES = frozenset({'MAPPING', 'RAPID_NAV'})
 
     def _scan_cb(self, msg: LaserScan):
         if self.mission_state not in self.ACTIVE_STATES:
