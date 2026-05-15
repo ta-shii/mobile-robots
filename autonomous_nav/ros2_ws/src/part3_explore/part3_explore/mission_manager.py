@@ -88,6 +88,7 @@ class MissionManager(Node):
 
         self.state         = MissionState.IDLE
         self._estop_active = False
+        self._prev_buttons = []   # previous Joy button state for rising-edge detection
 
         # ── Publishers ──────────────────────────────────────────────────
         self._state_pub = self.create_publisher(String, '/mission/state', 10)
@@ -125,27 +126,35 @@ class MissionManager(Node):
     # -----------------------------------------------------------------------
 
     def _joy_cb(self, msg: Joy):
-        n = len(msg.buttons)
+        cur = list(msg.buttons)
+        prev = self._prev_buttons
+
+        def pressed(idx):
+            """True only on the rising edge (0→1) of a button."""
+            return (len(cur) > idx and cur[idx] and
+                    not (len(prev) > idx and prev[idx]))
 
         # Cross – start AUTO mapping (m-explore + Nav2)
-        if n > self.BTN_X and msg.buttons[self.BTN_X]:
+        if pressed(self.BTN_X):
             if self.state == MissionState.IDLE:
                 self._transition(MissionState.MAPPING)
 
         # Triangle – start MANUAL mapping (gamepad drives, SLAM maps)
-        if n > self.BTN_TRIANGLE and msg.buttons[self.BTN_TRIANGLE]:
+        if pressed(self.BTN_TRIANGLE):
             if self.state == MissionState.IDLE:
                 self._transition(MissionState.MANUAL_MAPPING)
 
         # Square – move to Phase 2 once mapping is done
-        if n > self.BTN_SQUARE and msg.buttons[self.BTN_SQUARE]:
+        if pressed(self.BTN_SQUARE):
             if self.state in MissionState.PHASE1_STATES:
                 self._transition(MissionState.RAPID_NAV)
 
         # Circle – abort back to IDLE from any active state
-        if n > self.BTN_O and msg.buttons[self.BTN_O]:
+        if pressed(self.BTN_O):
             if self.state != MissionState.IDLE:
                 self._transition(MissionState.IDLE)
+
+        self._prev_buttons = cur
 
     # -----------------------------------------------------------------------
     # E-stop

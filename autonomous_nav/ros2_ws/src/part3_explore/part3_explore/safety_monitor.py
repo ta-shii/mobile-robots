@@ -47,7 +47,7 @@ class MovingObstacleMonitor(Node):
 
     DANGER_RADIUS     = 1.0   # metres – e-stop if moving object within 1 m
     DELTA_THRESH      = 0.30  # metres – beam must be this much shorter than background
-    MIN_BEAMS         = 1     # minimum flagged beams to confirm (filters noise)
+    MIN_BEAMS         = 3     # minimum flagged beams to confirm (filters noise)
     BACKGROUND_SCANS  = 10    # rolling window depth for background estimation
     CLEAR_SECS        = 3.0   # seconds of clear scans before auto-clearing e-stop
 
@@ -75,8 +75,10 @@ class MovingObstacleMonitor(Node):
 
     # ------------------------------------------------------------------
     def _state_cb(self, msg: String):
+        prev = self.mission_state
         self.mission_state = msg.data
-        if msg.data == 'IDLE':
+        # Only clear estop on a genuine transition TO idle, not on every broadcast
+        if msg.data == 'IDLE' and prev != 'IDLE':
             self._set_estop(False)
 
     # States where the safety monitor is active
