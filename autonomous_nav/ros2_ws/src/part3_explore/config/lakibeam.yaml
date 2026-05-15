@@ -1,0 +1,10 @@
+lidar:
+  ros__parameters:
+    hostip: "192.168.198.1"
+    port: 2368
+    scan_range_start: 45.0
+    scan_range_stop: 315.0
+    scanfreq: 20
+    filter: 1
+    angle_offset: 0.0
+    inverted: false
