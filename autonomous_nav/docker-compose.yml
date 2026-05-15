@@ -17,6 +17,7 @@ services:
       - ./ros2_ws/src/part3_explore:/workspace/autonomous_nav/ros2_ws/src/part3_explore
       - ./ros2_ws/src/p3at:/workspace/autonomous_nav/ros2_ws/src/p3at
       - ./ros2_ws/src/ariaNode:/workspace/autonomous_nav/ros2_ws/src/ariaNode
+      - ./ros2_ws/src/m-explore-ros2:/workspace/autonomous_nav/ros2_ws/src/m-explore-ros2
       - ./ros2_ws/maps:/workspace/autonomous_nav/ros2_ws/maps
       - ./logs:/workspace/autonomous_nav/logs
       - /tmp/.X11-unix:/tmp/.X11-unix
