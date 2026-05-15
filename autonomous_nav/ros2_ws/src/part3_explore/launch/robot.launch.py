@@ -182,13 +182,15 @@ def generate_launch_description():
     # Picks frontier goals and sends NavigateToPose to Nav2.
     # Controlled by mission_manager: cancels Nav2 goals on state change.
     explore_node = TimerAction(
-        period=15.0,   # wait for SLAM to build initial map before exploring
+        period=15.0,   # wait for SLAM to build initial map before first attempt
         actions=[Node(
             package='explore_lite',
             executable='explore',
             name='explore',
             output='screen',
             parameters=[explore_params],
+            respawn=True,
+            respawn_delay=5.0,  # retry every 5 s until frontiers appear
         )],
     )
 

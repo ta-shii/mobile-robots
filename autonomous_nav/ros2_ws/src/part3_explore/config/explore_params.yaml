@@ -18,7 +18,7 @@ explore:
 
     # Minimum frontier size in cells to be considered worth visiting.
     # Filters out tiny gaps in the map that aren't real unexplored areas.
-    min_frontier_size: 5.0
+    min_frontier_size: 1.0
 
     # If true, explore_lite visits the closest frontier first.
     # False = visits the largest frontier first (explores faster in open spaces).
