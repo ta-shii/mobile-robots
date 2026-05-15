@@ -1,0 +1,31 @@
+# explore_params.yaml – m-explore-ros2 (explore_lite) configuration
+#
+# m-explore picks frontier points on the /map boundary and sends
+# NavigateToPose goals to Nav2.  It runs only during MAPPING state;
+# mission_manager cancels all Nav2 goals when leaving that state.
+
+explore:
+  ros__parameters:
+    use_sim_time: false
+
+    # How often to recompute frontiers and send a new goal (seconds).
+    # Shorter = more reactive to new map areas; longer = less Nav2 chatter.
+    planner_frequency: 0.33      # ~every 3 seconds
+
+    # How long to wait for Nav2 to reach a frontier before giving up
+    # and picking the next one (seconds).
+    progress_timeout: 30.0
+
+    # Minimum frontier size in cells to be considered worth visiting.
+    # Filters out tiny gaps in the map that aren't real unexplored areas.
+    min_frontier_size: 5
+
+    # If true, explore_lite visits the closest frontier first.
+    # False = visits the largest frontier first (explores faster in open spaces).
+    closest_frontier: false
+
+    # Frame in which frontier markers are published (for RViz visualisation).
+    visualize: true
+
+    # Topic names – must match the rest of the stack
+    robot_base_frame: base_link
