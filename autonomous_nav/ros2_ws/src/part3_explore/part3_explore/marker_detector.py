@@ -195,19 +195,19 @@ class MarkerDetector(Node):
 
         paper, bbox = self._find_white_paper(frame)
         if paper is None:
-            self.get_logger().debug('No white paper found in frame')
+            # self.get_logger().debug('No white paper found in frame')
             return
 
-        bx, by, bw, bh = bbox
-        self.get_logger().info(f'White paper found: bbox=({bx},{by},{bw}x{bh})')
+        #bx, by, bw, bh = bbox
+        #self.get_logger().info(f'White paper found: bbox=({bx},{by},{bw}x{bh})')
 
         preprocessed = _preprocess_for_ocr(paper)
         char, conf = _run_tesseract(preprocessed, self.get_logger())
         engine = 'tesseract'
 
-        self.get_logger().info(
-            f'OCR raw: "{char}"  conf={conf:.0f}  thresh={TESS_CONF_THRESH}'
-        )
+        # self.get_logger().info(
+            #f'OCR raw: "{char}"  conf={conf:.0f}  thresh={TESS_CONF_THRESH}'
+        #)
 
         if char is None or conf < TESS_CONF_THRESH:
             return
