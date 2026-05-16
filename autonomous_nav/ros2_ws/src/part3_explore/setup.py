@@ -25,8 +25,8 @@ setup(
         'console_scripts': [
             'mission_manager         = part3_explore.mission_manager:main',
             'safety_monitor          = part3_explore.safety_monitor:main',
-            'color_detector          = part3_explore.color_detector:main',
             'velocity_safety_filter  = part3_explore.velocity_safety_filter:main',
+            'marker_detector         = part3_explore.marker_detector:main',
         ],
     },
 )

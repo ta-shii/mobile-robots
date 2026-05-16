@@ -35,6 +35,9 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
+# OAK-D camera driver share path (installed system-wide)
+_DEPTHAI_SHARE = '/opt/ros/jazzy/share/depthai_ros_driver_v3'
+
 
 def generate_launch_description():
 
@@ -194,7 +197,19 @@ def generate_launch_description():
         )],
     )
 
-    # ── 8, 9, 10, 11. Our Part 3 nodes ──────────────────────────────────────
+    # ── 8. OAK-D camera driver ──────────────────────────────────────────────
+    # Use driver_node directly (same as Part 2) so the node is named /oak
+    # and publishes /oak/rgb/image_raw.  IncludeLaunchDescription of driver.launch.py
+    # spawns a component container (/oak_container) which doesn't stream by default.
+    camera_node = Node(
+        package='depthai_ros_driver_v3',
+        executable='driver_node',
+        name='oak',
+        output='screen',
+        parameters=[os.path.join(_DEPTHAI_SHARE, 'config', 'driver.yaml')],
+    )
+
+    # ── 9, 10, 11, 12. Our Part 3 nodes ─────────────────────────────────────
     def p3_node(executable):
         return Node(
             package='part3_explore',
@@ -207,6 +222,17 @@ def generate_launch_description():
     mission_manager        = p3_node('mission_manager')
     safety_monitor         = p3_node('safety_monitor')
     velocity_safety_filter = p3_node('velocity_safety_filter')
+
+    marker_detector = Node(
+        package='part3_explore',
+        executable='marker_detector',
+        name='marker_detector',
+        parameters=[
+            p3_params,
+            {'output_dir': '/workspace/autonomous_nav/outputs'},
+        ],
+        output='screen',
+    )
 
     return LaunchDescription(
         declared_args + [
@@ -221,8 +247,10 @@ def generate_launch_description():
             bt_navigator,
             nav2_lifecycle_manager,
             explore_node,
+            camera_node,
             mission_manager,
             safety_monitor,
             velocity_safety_filter,
+            marker_detector,
         ]
     )
