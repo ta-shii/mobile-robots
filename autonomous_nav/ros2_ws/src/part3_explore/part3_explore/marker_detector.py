@@ -135,10 +135,11 @@ class MarkerDetector(Node):
         self._waypoints = _load_json(self._waypoints_file, [])
         self._obstacles = _load_json(self._obstacles_file, [])
 
-        self._bridge       = CvBridge()
-        self._state        = 'IDLE'
-        self._latest_frame = None
+        self._bridge          = CvBridge()
+        self._state           = 'IDLE'
+        self._latest_frame    = None
         self._last_obstacle_t: dict = {}
+        self._last_marker_t:  dict = {}   # per-letter cooldown
 
         # TF
         self._tf_buffer   = Buffer()
@@ -194,37 +195,51 @@ class MarkerDetector(Node):
 
         paper, bbox = self._find_white_paper(frame)
         if paper is None:
+            self.get_logger().debug('No white paper found in frame')
             return
+
+        bx, by, bw, bh = bbox
+        self.get_logger().info(f'White paper found: bbox=({bx},{by},{bw}x{bh})')
 
         preprocessed = _preprocess_for_ocr(paper)
         char, conf = _run_tesseract(preprocessed, self.get_logger())
         engine = 'tesseract'
 
-        if char:
-            self.get_logger().debug(f'Tesseract: "{char}"  conf={conf:.0f}/100')
+        self.get_logger().info(
+            f'OCR raw: "{char}"  conf={conf:.0f}  thresh={TESS_CONF_THRESH}'
+        )
 
         if char is None or conf < TESS_CONF_THRESH:
             return
 
-        # Normalise: strip whitespace, take first character if multiple
+        # Take the first character that maps to a Greek letter
         char = char.strip()
-        if not char:
+        greek_char = None
+        for c in char:
+            if c.upper() in GREEK_MAP or c in GREEK_MAP:
+                greek_char = c.upper() if c.upper() in GREEK_MAP else c
+                break
+        if greek_char is None:
+            self.get_logger().debug(f'OCR result "{char}" has no Greek mapping — ignoring')
             return
-        if len(char) > 3:
-            self.get_logger().debug(f'OCR long result "{char}" — ignoring')
-            return
+        char = greek_char
 
-        greek_name = GREEK_MAP.get(char.upper(), GREEK_MAP.get(char, char))
+        greek_name = GREEK_MAP[char]
+
+        # Per-letter cooldown: don't spam the same marker
+        now = time.monotonic()
+        if now - self._last_marker_t.get(char, 0) < 30.0:
+            return
+        self._last_marker_t[char] = now
 
         pos = self._map_position()
         if pos is None:
             self.get_logger().warn(
-                f'TF not ready — OCR detected "{greek_name} ({char.upper()})" '
-                f'conf={conf:.0f} but map position unavailable. '
-                f'Will record when SLAM is running.'
+                f'TF not ready — saving "{greek_name} ({char})" with position (0,0)'
             )
-            return
-        x_map, y_map = pos
+            x_map, y_map = 0.0, 0.0
+        else:
+            x_map, y_map = pos
 
         # Save annotated photo
         ts        = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -337,8 +352,10 @@ class MarkerDetector(Node):
 
             pos = self._map_position()
             if pos is None:
-                continue
-            x_map, y_map = pos
+                self.get_logger().warn(f'TF not ready — saving {colour} obstacle with position (0,0)')
+                x_map, y_map = 0.0, 0.0
+            else:
+                x_map, y_map = pos
 
             ts        = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             annotated = frame.copy()
