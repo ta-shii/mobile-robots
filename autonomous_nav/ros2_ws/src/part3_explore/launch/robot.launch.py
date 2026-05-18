@@ -101,7 +101,7 @@ def generate_launch_description():
         }],
     )
 
-    Node(
+    foxglove_bridge =Node(
         package='foxglove_bridge',
         executable='foxglove_bridge',
         name='foxglove_bridge',
