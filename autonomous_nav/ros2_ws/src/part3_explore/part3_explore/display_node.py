@@ -70,10 +70,10 @@ STATE_COLOR = {
     'RAPID_NAV':      (0,   120, 220),
 }
 STATE_LABEL = {
-    'IDLE':           'IDLE  –  Waiting for operator input',
-    'MAPPING':        'PHASE 1  –  Autonomous Mapping',
-    'MANUAL_MAPPING': 'PHASE 1  –  Manual Mapping',
-    'RAPID_NAV':      'PHASE 2  –  Rapid Waypoint Navigation',
+    'IDLE':           'IDLE  -  Waiting for operator input',
+    'MAPPING':        'PHASE 1  -  Autonomous Mapping',
+    'MANUAL_MAPPING': 'PHASE 1  -  Manual Mapping',
+    'RAPID_NAV':      'PHASE 2  -  Rapid Waypoint Navigation',
 }
 
 
@@ -193,12 +193,12 @@ class DisplayNode(Node):
     def _draw_idle(self, canvas):
         y = HEADER_H + 80
         for line in [
-            'X  (Cross)     →   Start autonomous mapping',
-            '△  (Triangle)  →   Start manual mapping',
-            '□  (Square)    →   Start Phase 2 (after mapping)',
-            'O  (Circle)    →   Abort / return to IDLE',
+            'X  (Cross)     ->  Start autonomous mapping',
+            '/\\  (Triangle) ->  Start manual mapping',
+            '[] (Square)    ->  Start Phase 2 (after mapping)',
+            'O  (Circle)    ->  Abort / return to IDLE',
             '',
-            'L1 + sticks    →   Manual drive override (any state)',
+            'L1 + sticks    ->  Manual drive override (any state)',
         ]:
             _text(canvas, line, 80, y, color=C_WHITE, scale=0.75)
             y += 46
