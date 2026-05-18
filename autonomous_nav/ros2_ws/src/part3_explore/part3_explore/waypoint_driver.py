@@ -48,7 +48,7 @@ from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.time import Time
-from std_msgs.msg import String
+from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformListener
 
 MAX_WAYPOINTS  = 3
@@ -68,6 +68,10 @@ class WaypointDriver(Node):
         self._waypoints   = []     # ordered list to visit (computed on RAPID_NAV entry)
         self._current_idx = 0
         self._goal_handle = None
+        self._home_pos    = None   # robot position recorded on RAPID_NAV entry
+
+        # Publisher – current waypoint index for display_node
+        self._index_pub = self.create_publisher(Int32, '/waypoint_driver/index', 10)
 
         # TF – to read robot position in map frame for path ordering
         self._tf_buffer   = Buffer()
@@ -100,6 +104,7 @@ class WaypointDriver(Node):
         self._active      = True
         self._current_idx = 0
         self._goal_handle = None
+        self._home_pos    = self._robot_position()
 
         waypoints = self._load_waypoints()
         if not waypoints:
@@ -146,9 +151,16 @@ class WaypointDriver(Node):
             return
 
         if self._current_idx >= len(self._waypoints):
-            self.get_logger().info(
-                f'All {len(self._waypoints)} waypoint(s) visited.  RAPID_NAV complete.'
-            )
+            if self._home_pos is not None:
+                self.get_logger().info(
+                    f'All {len(self._waypoints)} waypoint(s) visited.  '
+                    f'Returning to home ({self._home_pos[0]:.2f}, {self._home_pos[1]:.2f}).'
+                )
+                self._send_home()
+            else:
+                self.get_logger().info(
+                    f'All {len(self._waypoints)} waypoint(s) visited.  RAPID_NAV complete.'
+                )
             return
 
         wp = self._waypoints[self._current_idx]
@@ -222,7 +234,34 @@ class WaypointDriver(Node):
     def _advance(self):
         self._current_idx += 1
         self._goal_handle  = None
+        self._index_pub.publish(Int32(data=self._current_idx))
         self._send_next_goal()
+
+    def _send_home(self):
+        if not self._nav_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error('Nav2 not available for return-to-home.')
+            return
+        home = self._home_pos
+        self._home_pos = None   # clear to prevent re-triggering
+        goal = NavigateToPose.Goal()
+        goal.pose = _make_pose(home[0], home[1])
+        future = self._nav_client.send_goal_async(goal)
+        future.add_done_callback(self._home_response_cb)
+
+    def _home_response_cb(self, future):
+        handle = future.result()
+        if not handle.accepted:
+            self.get_logger().error('Return-to-home goal rejected by Nav2.')
+            return
+        self.get_logger().info('Returning home – goal accepted.')
+        handle.get_result_async().add_done_callback(self._home_result_cb)
+
+    def _home_result_cb(self, future):
+        status = future.result().status
+        if status == GoalStatus.STATUS_SUCCEEDED:
+            self.get_logger().info('Returned to home position.  RAPID_NAV complete.')
+        else:
+            self.get_logger().warn(f'Return-to-home ended with status {status}.')
 
     # ------------------------------------------------------------------
     # Helpers

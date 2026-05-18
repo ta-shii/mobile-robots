@@ -262,6 +262,21 @@ class DisplayNode(Node):
                 _text(canvas, line, RIGHT_X, y, color=color, scale=0.65, thickness=2)
                 y += 52
 
+            # Return to home row
+            n = len(wps)
+            if self._wp_index < n:
+                home_color  = C_GREY
+                home_prefix = f'  {n+1}.  '
+            elif self._wp_index == n:
+                home_color  = (0, 200, 255)
+                home_prefix = '>>>   '
+            else:
+                home_color  = C_DONE
+                home_prefix = 'DONE  '
+            _text(canvas, f'{home_prefix}Return to Home',
+                  RIGHT_X, y, color=home_color, scale=0.65, thickness=2)
+            y += 52
+
     # ── Map renderer ──────────────────────────────────────────────────────────
 
     def _render_map(self, w, h, draw_path=False):
