@@ -218,6 +218,7 @@ def generate_launch_description():
         name='oak',
         output='screen',
         parameters=[os.path.join(_DEPTHAI_SHARE, 'config', 'driver.yaml')],
+        arguments=['--ros-args', '--log-level', 'fatal'],
     )
 
     # ── 9, 10, 11, 12, 13. Our Part 3 nodes ────────────────────────────────────
@@ -256,6 +257,14 @@ def generate_launch_description():
         output='screen',
     )
 
+    display_node = Node(
+        package='part3_explore',
+        executable='display_node',
+        name='display_node',
+        parameters=[p3_params],
+        output='screen',
+    )
+
     return LaunchDescription(
         declared_args + [
             aria_node,
@@ -275,6 +284,7 @@ def generate_launch_description():
             velocity_safety_filter,
             marker_detector,
             waypoint_driver,
+            display_node,
             foxglove_bridge,
         ]
     )
