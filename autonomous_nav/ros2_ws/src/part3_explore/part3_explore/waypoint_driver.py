@@ -245,21 +245,30 @@ class WaypointDriver(Node):
         if not isinstance(data, list) or len(data) == 0:
             self.get_logger().warn('Waypoints file is empty or not a JSON list.')
             return []
-        if len(data) > MAX_WAYPOINTS:
-            self.get_logger().warn(
-                f'Found {len(data)} waypoints – using only the first {MAX_WAYPOINTS}.'
-            )
-            data = data[:MAX_WAYPOINTS]
-        # Validate required fields
+        # Filter: must have required fields and a real (non-zero) position
         valid = []
+        skipped_zero = 0
         for i, w in enumerate(data):
-            if all(k in w for k in ('letter', 'greek_name', 'x', 'y')):
-                valid.append(w)
-            else:
+            if not all(k in w for k in ('letter', 'greek_name', 'x', 'y')):
                 self.get_logger().warn(
                     f'Waypoint {i} missing required fields '
                     '(letter, greek_name, x, y) – skipping.'
                 )
+                continue
+            if w['x'] == 0.0 and w['y'] == 0.0:
+                skipped_zero += 1
+                continue
+            valid.append(w)
+        if skipped_zero > 0:
+            self.get_logger().warn(
+                f'Skipped {skipped_zero} entries with position (0, 0) '
+                '– these are junk detections where TF was not ready.'
+            )
+        if len(valid) > MAX_WAYPOINTS:
+            self.get_logger().warn(
+                f'Found {len(valid)} valid waypoints – using only the first {MAX_WAYPOINTS}.'
+            )
+            valid = valid[:MAX_WAYPOINTS]
         return valid
 
     def _robot_position(self):
