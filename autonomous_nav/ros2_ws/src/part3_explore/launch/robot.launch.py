@@ -101,6 +101,17 @@ def generate_launch_description():
         }],
     )
 
+    Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        parameters=[{
+            'port':  8765,
+            'address': '0.0.0.0',
+        }],
+    )
+
     # ── 4. Lakibeam lidar driver ────────────────────────────────────────────
     lakibeam_node = Node(
         package='lakibeam1',
@@ -209,7 +220,7 @@ def generate_launch_description():
         parameters=[os.path.join(_DEPTHAI_SHARE, 'config', 'driver.yaml')],
     )
 
-    # ── 9, 10, 11, 12. Our Part 3 nodes ─────────────────────────────────────
+    # ── 9, 10, 11, 12, 13. Our Part 3 nodes ────────────────────────────────────
     def p3_node(executable):
         return Node(
             package='part3_explore',
@@ -234,6 +245,17 @@ def generate_launch_description():
         output='screen',
     )
 
+    waypoint_driver = Node(
+        package='part3_explore',
+        executable='waypoint_driver',
+        name='waypoint_driver',
+        parameters=[
+            p3_params,
+            {'waypoints_file': '/workspace/autonomous_nav/outputs/markers/waypoints.json'},
+        ],
+        output='screen',
+    )
+
     return LaunchDescription(
         declared_args + [
             aria_node,
@@ -252,5 +274,7 @@ def generate_launch_description():
             safety_monitor,
             velocity_safety_filter,
             marker_detector,
+            waypoint_driver,
+            foxglove_bridge,
         ]
     )

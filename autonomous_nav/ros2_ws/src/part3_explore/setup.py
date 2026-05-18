@@ -27,6 +27,7 @@ setup(
             'safety_monitor          = part3_explore.safety_monitor:main',
             'velocity_safety_filter  = part3_explore.velocity_safety_filter:main',
             'marker_detector         = part3_explore.marker_detector:main',
+            'waypoint_driver         = part3_explore.waypoint_driver:main',
         ],
     },
 )
