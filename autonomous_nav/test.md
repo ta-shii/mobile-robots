@@ -13,7 +13,7 @@ cd ~/Desktop/group9/mobile-robots/autonomous_nav
 colcon build --packages-select part3_explore --build-base ros2_ws/build --install-base install
 source install/setup.bash
 
-# Clear old waypoints
+# Clear old waypoints (or can overwrite later)
 echo '[]' > /workspace/autonomous_nav/outputs/markers/waypoints.json
 
 # Launch everything
@@ -41,7 +41,7 @@ ros2 launch part3_explore robot.launch.py
 
 Press **Triangle (△)** → state becomes `MANUAL_MAPPING`
 
-Drive with **L1 (deadman) + left stick (forward/back) + right stick (turn)**. Cover the full area.
+Drive with **Button 4 (deadman) + left stick (forward/back) + right stick (turn)**. Cover the full area.
 
 While mapping, drive to each marker, stop, and note the coordinates:
 ```bash
