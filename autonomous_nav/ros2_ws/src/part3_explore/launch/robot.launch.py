@@ -28,8 +28,9 @@ Usage
 """
 
 import os
+import datetime
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -265,6 +266,32 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ── Task 9: rosbag recording ────────────────────────────────────────────
+    bag_dir = '/workspace/autonomous_nav/outputs/bags/run_' + \
+              datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    rosbag_record = ExecuteProcess(
+        cmd=[
+            'ros2', 'bag', 'record',
+            '-o', bag_dir,
+            '/mission/state',
+            '/cmd_vel',
+            '/cmd_vel_nav',
+            '/odom',
+            '/scan',
+            '/map',
+            '/tf',
+            '/tf_static',
+            '/joy',
+            '/estop/triggered',
+            '/estop/incident_log',
+            '/markers/detected',
+            '/markers/all',
+            '/waypoint_driver/index',
+            '/plan',
+        ],
+        output='screen',
+    )
+
     return LaunchDescription(
         declared_args + [
             aria_node,
@@ -286,5 +313,6 @@ def generate_launch_description():
             waypoint_driver,
             display_node,
             foxglove_bridge,
+            rosbag_record,
         ]
     )
