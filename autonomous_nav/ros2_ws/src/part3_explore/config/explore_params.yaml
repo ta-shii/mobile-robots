@@ -9,22 +9,19 @@ explore:
     use_sim_time: false
 
     # How often to recompute frontiers and send a new goal (seconds).
-    # Shorter = more reactive to new map areas; longer = less Nav2 chatter.
-    planner_frequency: 0.33      # ~every 3 seconds
+    planner_frequency: 0.2       # was 0.33 – slower selection reduces bad goal spam
 
-    # How long to wait for Nav2 to reach a frontier before giving up
-    # and picking the next one (seconds).
-    progress_timeout: 30.0
+    # How long to wait for Nav2 to reach a frontier before giving up.
+    progress_timeout: 20.0       # was 30.0 – give up faster on unreachable goals
 
     # Minimum frontier size in cells to be considered worth visiting.
-    # Filters out tiny gaps in the map that aren't real unexplored areas.
-    min_frontier_size: 1.0
+    # Raised to filter out edge/boundary frontiers outside the costmap.
+    min_frontier_size: 1.5       # was 0.75
 
-    # If true, explore_lite visits the closest frontier first.
-    # False = visits the largest frontier first (explores faster in open spaces).
-    closest_frontier: false
+    # Visit closest frontier first – good for incremental map building.
+    closest_frontier: true
 
-    # Frame in which frontier markers are published (for RViz visualisation).
+    # Publish frontier markers for RViz/Foxglove visualisation.
     visualize: true
 
     # Topic names – must match the rest of the stack

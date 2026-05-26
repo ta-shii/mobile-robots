@@ -9,15 +9,20 @@ Nodes started
   5.  slam_toolbox          – builds /map from /scan + /odom
   6.  Nav2 stack            – path planning + obstacle avoidance
                               (controller publishes to /cmd_vel_nav)
-  7.  explore_lite          – frontier exploration (MAPPING state only)
-  8.  mission_manager       – state machine: IDLE/MAPPING/MANUAL_MAPPING/RAPID_NAV
-  9.  safety_monitor        – e-stop if moving object within 1 m
-  10. velocity_safety_filter – sole /cmd_vel publisher (estop > manual L1 > Nav2)
-  11. color_detector        – detects Greek-letter markers via camera
+  7.  explore_lite          – frontier exploration (controlled by explorer_node)
+  8.  explorer_node         – drives perimeter first, then resumes explore_lite,
+                              then returns robot home to (0,0)
+  9.  mission_manager       – state machine: IDLE/MAPPING/MANUAL_MAPPING/RAPID_NAV
+  10. safety_monitor        – e-stop if moving object within 1 m
+  11. velocity_safety_filter – sole /cmd_vel publisher (estop > manual L1 > Nav2)
+  12. marker_detector       – detects Greek-letter markers via camera
+  13. waypoint_driver       – Phase 2 waypoint navigation
+  14. display_node          – display output
+  15. foxglove_bridge       – visualisation
 
 Operator workflow
+  X (Cross)    – IDLE → MAPPING  (autonomous: perimeter → explore → home)
   △ (Triangle) – IDLE → MANUAL_MAPPING  (drive with L1 + sticks, SLAM maps)
-  X (Cross)    – IDLE → MAPPING         (m-explore drives autonomously)
   □ (Square)   – MAPPING|MANUAL → RAPID_NAV  (Phase 2 waypoint navigation)
   O (Circle)   – any  → IDLE            (abort / e-stop clear)
   L1 + sticks  – manual override at any time (in any non-IDLE state)
@@ -102,7 +107,7 @@ def generate_launch_description():
         }],
     )
 
-    foxglove_bridge =Node(
+    foxglove_bridge = Node(
         package='foxglove_bridge',
         executable='foxglove_bridge',
         name='foxglove_bridge',
@@ -140,10 +145,8 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ── 6. Nav2 stack (individual nodes only – avoids Jazzy extras) ────────────
-    # We start only the nodes we need: planner, controller, bt_navigator,
-    # behavior_server.  collision_monitor, route_server, docking_server etc.
-    # are intentionally excluded — they are not needed for exploration/nav.
+    # ── 6. Nav2 stack ───────────────────────────────────────────────────────
+    # Individual nodes only – avoids Jazzy extras we don't need.
     controller_server = Node(
         package='nav2_controller',
         executable='controller_server',
@@ -194,10 +197,10 @@ def generate_launch_description():
     )
 
     # ── 7. m-explore (explore_lite) ─────────────────────────────────────────
-    # Picks frontier goals and sends NavigateToPose to Nav2.
-    # Controlled by mission_manager: cancels Nav2 goals on state change.
+    # Controlled by explorer_node – starts but waits for explorer_node to
+    # signal it after the perimeter drive is complete.
     explore_node = TimerAction(
-        period=15.0,   # wait for SLAM to build initial map before first attempt
+        period=15.0,   # wait for SLAM + Nav2 to be ready before starting
         actions=[Node(
             package='explore_lite',
             executable='explore',
@@ -205,14 +208,26 @@ def generate_launch_description():
             output='screen',
             parameters=[explore_params],
             respawn=True,
-            respawn_delay=5.0,  # retry every 5 s until frontiers appear
+            respawn_delay=5.0,
         )],
     )
 
-    # ── 8. OAK-D camera driver ──────────────────────────────────────────────
-    # Use driver_node directly (same as Part 2) so the node is named /oak
-    # and publishes /oak/rgb/image_raw.  IncludeLaunchDescription of driver.launch.py
-    # spawns a component container (/oak_container) which doesn't stream by default.
+    # ── 8. explorer_node ────────────────────────────────────────────────────
+    # Drives perimeter of 15x15 m area first so SLAM gets full boundary,
+    # then resumes explore_lite for interior coverage,
+    # then navigates back to (0,0) when exploration is complete.
+    explorer_node = TimerAction(
+        period=15.0,   # wait for Nav2 to be fully active before sending goals
+        actions=[Node(
+            package='part3_explore',
+            executable='explorer_node',
+            name='explorer_node',
+            output='screen',
+            parameters=[p3_params],
+        )],
+    )
+
+    # ── 9. OAK-D camera driver ──────────────────────────────────────────────
     camera_node = Node(
         package='depthai_ros_driver_v3',
         executable='driver_node',
@@ -222,7 +237,7 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', 'fatal'],
     )
 
-    # ── 9, 10, 11, 12, 13. Our Part 3 nodes ────────────────────────────────────
+    # ── 10-14. Our Part 3 nodes ─────────────────────────────────────────────
     def p3_node(executable):
         return Node(
             package='part3_explore',
@@ -266,7 +281,7 @@ def generate_launch_description():
         output='screen',
     )
 
-    # ── Task 9: rosbag recording ────────────────────────────────────────────
+    # ── rosbag recording ────────────────────────────────────────────────────
     bag_dir = '/workspace/autonomous_nav/outputs/bags/run_' + \
               datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     rosbag_record = ExecuteProcess(
@@ -275,18 +290,13 @@ def generate_launch_description():
             '-o', bag_dir,
             '/mission/state',
             '/cmd_vel',
-            '/cmd_vel_nav',
             '/odom',
             '/scan',
             '/map',
             '/tf',
             '/tf_static',
-            '/joy',
-            '/estop/triggered',
             '/estop/incident_log',
             '/markers/detected',
-            '/markers/all',
-            '/waypoint_driver/index',
             '/plan',
         ],
         output='screen',
