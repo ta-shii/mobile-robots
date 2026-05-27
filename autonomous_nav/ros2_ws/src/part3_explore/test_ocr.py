@@ -8,127 +8,145 @@ Usage:
   python3 test_ocr.py
 
   # Test with a saved image file
-  python3 /workspace/autonomous_nav/ros2_ws/src/part3_explore/test_ocr.py \
-  --image /workspace/autonomous_nav/ros2_ws/src/part3_explore/photo.png"""
+  python3 /home/team9/Desktop/group9/mobile-robots/autonomous_nav/ros2_ws/src/part3_explore/test_ocr.py \
+  --image /home/team9/Desktop/group9/mobile-robots/autonomous_nav/ros2_ws/src/part3_explore/photo.png
+  
+  # With debug visualization (shows intermediate steps)
+  python3 test_ocr.py --image photo.png --debug
+  
+  # Interactive threshold tuning
+  python3 test_ocr.py --image photo.png --tune"""
 
 import sys
 import argparse
+import json
+import os
 import cv2
 import numpy as np
-import pytesseract
 
-# ── OCR config ─────────────────────────────────────────────────────────────
-# NOTE: LSTM engine (oem 1/3) ignores tessedit_char_whitelist — don't use it.
-# Instead we post-process results to fix digit/letter lookalikes.
-TESS_CONFIGS = [
-    '--psm 8 -l eng --oem 1',   # single word — best for large handwritten single char
-    '--psm 7 -l eng --oem 1',   # single line — fallback
-]
-CONF_THRESH    = 30   # lowered for testing — raise to 50 in production
-WHITE_MIN_AREA = 3000
+try:
+    import torch
+    import torch.nn as nn
+    import torchvision.models as tv_models
+    import torchvision.transforms as T
+    from PIL import Image as PILImage
 
-# Post-processing: fix digit/letter lookalikes that Tesseract commonly confuses
-_DIGIT_FIX = {'8': 'B', '0': 'O', '1': 'I', '5': 'S', '2': 'Z', '6': 'G'}
+    _CLF_DIR = os.path.join(os.path.dirname(__file__), 'part3_explore', 'greek_ocr', 'classifier')
 
+    with open(os.path.join(_CLF_DIR, 'classes.json')) as _f:
+        _idx_to_class = {int(k): v for k, v in json.load(_f).items()}
 
-def preprocess(img):
-    """
-    1. Convert to grayscale and threshold to find dark ink on white paper.
-    2. Find the largest dark contour cluster (the letter itself).
-    3. Crop tight to just the letter + padding — removes tape/edge noise.
-    4. Resize to fixed height and add border for Tesseract.
-    """
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _clf_model = tv_models.mobilenet_v2(weights=None)
+    _clf_model.classifier[1] = nn.Linear(_clf_model.last_channel, len(_idx_to_class))
+    _clf_model.load_state_dict(
+        torch.load(os.path.join(_CLF_DIR, 'mobilenet_best.pth'), map_location='cpu')
+    )
+    _clf_model.eval()
+    _clf_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    _clf_model.to(_clf_device)
+    _clf_transform = T.Compose([
+        T.Resize((224, 224)),
+        T.ToTensor(),
+        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
+    _CLASSIFIER_OK = True
+    print(f'[Classifier] MobileNetV2 loaded  ({len(_idx_to_class)} classes, device={_clf_device})')
+except Exception as e:
+    _CLASSIFIER_OK = False
+    print(f'[Classifier] not available ({e})')
 
-    # Threshold: find dark ink pixels
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+CONF_THRESH = 60   # minimum classifier confidence (0-100) to accept a detection
 
-    # Clean small noise
-    k      = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, k)
+# Debug output directory — save next to this script so /workspace isn't needed
+_DEBUG_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # Find all dark contours
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        # Fallback: return full image
-        return _resize_and_pad(255 - binary)
-
-    # Keep only contours away from all edges (excludes tape, floor, background)
-    h, w    = binary.shape
-    x_margin = int(w * 0.15)
-    y_margin = int(h * 0.10)
-    central_contours = [
-        c for c in contours
-        if cv2.contourArea(c) > 80
-        and cv2.boundingRect(c)[0] > x_margin                          # left edge
-        and cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] < w - x_margin  # right edge
-        and cv2.boundingRect(c)[1] > y_margin                          # top edge
-        and cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] < h - y_margin  # bottom edge
-    ]
-
-    if not central_contours:
-        central_contours = contours  # fallback: use all
-
-    # Get bounding box covering all central contours (the full letter)
-    all_pts = np.vstack([c.reshape(-1, 2) for c in central_contours])
-    lx, ly, lw, lh = cv2.boundingRect(all_pts)
-
-    # Crop to letter + 20% padding
-    pad = int(max(lw, lh) * 0.20)
-    x1  = max(0, lx - pad)
-    y1  = max(0, ly - pad)
-    x2  = min(w, lx + lw + pad)
-    y2  = min(h, ly + lh + pad)
-
-    letter_crop = gray[y1:y2, x1:x2]
-
-    # Re-threshold the clean crop
-    _, clean = cv2.threshold(letter_crop, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    return _resize_and_pad(clean)
+# ── White paper detection thresholds ───────────────────────────────────────
+WHITE_MIN_AREA    = 5000
+WHITE_MAX_AREA    = 300000
+HSV_MIN           = np.array([0, 0, 170])
+HSV_MAX           = np.array([180, 60, 255])
+ASPECT_MIN        = 0.5
+ASPECT_MAX        = 2.0
+RECT_MIN          = 0.7
+MORPH_KERNEL_SIZE = 5
 
 
-def _resize_and_pad(img):
-    h, w  = img.shape
-    scale = 300 / max(h, w)   # fit into 300x300
-    img   = cv2.resize(img, (int(w * scale), int(h * scale)),
-                       interpolation=cv2.INTER_CUBIC)
-    # Add 60px white border
-    return cv2.copyMakeBorder(img, 60, 60, 60, 60,
-                              cv2.BORDER_CONSTANT, value=255)
 
-
-def find_white_paper(frame):
+def find_white_paper(frame, debug=False):
     """
     Find the white A4 paper and return a perspective-corrected flat crop.
     This handles tilted/angled papers by warping the 4 detected corners.
+    
+    Args:
+        frame: Input image (BGR)
+        debug: If True, save intermediate visualization steps
     """
     h, w   = frame.shape[:2]
     roi_y0 = int(h * 0.20)
     roi    = frame[roi_y0:, :]
 
-    # HSV mask: true white = high brightness, low saturation
+    # HSV mask: IMPROVED — require very white (high V, very low S)
     hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 60, 255]))
+    mask = cv2.inRange(hsv, HSV_MIN, HSV_MAX)
+    
+    if debug:
+        cv2.imwrite(os.path.join(_DEBUG_DIR, 'debug_01_hsv_mask.jpg'), mask)
+        print('  [DEBUG] Saved: debug_01_hsv_mask.jpg')
 
-    k    = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    # Morphology with smaller kernel
+    k    = cv2.getStructuringElement(cv2.MORPH_RECT, (MORPH_KERNEL_SIZE, MORPH_KERNEL_SIZE))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k)
+    
+    if debug:
+        cv2.imwrite(os.path.join(_DEBUG_DIR, 'debug_02_morphology.jpg'), mask)
+        print('  [DEBUG] Saved: debug_02_morphology.jpg')
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if debug:
+        debug_contours = roi.copy()
+        cv2.drawContours(debug_contours, contours, -1, (0, 255, 0), 2)
+        cv2.imwrite(os.path.join(_DEBUG_DIR, 'debug_03_all_contours.jpg'), debug_contours)
+        print(f'  [DEBUG] Found {len(contours)} contours. Saved: debug_03_all_contours.jpg')
 
     best_contour, best_area = None, 0
-    for c in contours:
+    for i, c in enumerate(contours):
         area = cv2.contourArea(c)
-        if area < WHITE_MIN_AREA:
+        
+        # IMPROVED: Check both min AND max area
+        if area < WHITE_MIN_AREA or area > WHITE_MAX_AREA:
+            if debug:
+                print(f'    Contour {i}: area={area} - rejected (out of range [{WHITE_MIN_AREA}, {WHITE_MAX_AREA}])')
             continue
+        
         x, y, cw, ch = cv2.boundingRect(c)
         aspect = cw / float(ch) if ch > 0 else 0
-        if 0.25 < aspect < 4.0 and area > best_area:
+        
+        # IMPROVED: Stricter aspect ratio for A4 paper
+        if not (ASPECT_MIN < aspect < ASPECT_MAX):
+            if debug:
+                print(f'    Contour {i}: area={area}, aspect={aspect:.2f} - rejected (aspect out of [{ASPECT_MIN}, {ASPECT_MAX}])')
+            continue
+        
+        # IMPROVED: Check rectangularity (contour should fill ~70%+ of bounding box)
+        rect = cv2.minAreaRect(c)
+        rect_area = rect[1][0] * rect[1][1]
+        rectangularity = area / rect_area if rect_area > 0 else 0
+        if rectangularity < RECT_MIN:
+            if debug:
+                print(f'    Contour {i}: area={area}, aspect={aspect:.2f}, rect={rectangularity:.2f} - rejected (not rectangular)')
+            continue
+        
+        if area > best_area:
             best_area    = area
             best_contour = c
+            if debug:
+                print(f'    Contour {i}: area={area}, aspect={aspect:.2f}, rect={rectangularity:.2f} ✓ CANDIDATE')
 
     if best_contour is None:
+        if debug:
+            print('  [DEBUG] No contours passed filtering!')
         return None, None
 
     # Try to get 4 corners for perspective warp
@@ -145,10 +163,14 @@ def find_white_paper(frame):
         # Shift pts back to full-frame coordinates
         pts[:, 1] += roi_y0
         warped = _four_point_transform(frame, pts)
+        if debug:
+            print(f'  [DEBUG] 4-corner perspective warp applied')
         return warped, bbox
 
     # Fallback: plain bounding-box crop
     cropped = frame[fy:fy + ch, x:x + cw]
+    if debug:
+        print(f'  [DEBUG] Using bounding box crop (no 4-point detection)')
     return cropped, bbox
 
 
@@ -178,36 +200,51 @@ def _order_points(pts):
     return rect
 
 
-def run_tesseract(img):
-    best_text, best_conf = None, 0
+def run_classifier(img_bgr):
+    """MobileNetV2 classifier on a BGR image crop. Returns (word, conf 0-100)."""
+    try:
+        h, w  = img_bgr.shape[:2]
+        img   = cv2.resize(img_bgr, (256, int(h * 256 / w)), interpolation=cv2.INTER_AREA)
+        gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, bw = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+        blurred = cv2.GaussianBlur(bw, (3, 3), 0)
+        _, binary = cv2.threshold(blurred, 200, 255, cv2.THRESH_BINARY)
+        black = np.where(binary == 0)
+        if len(black[0]) > 0:
+            p = 6
+            binary = binary[
+                max(0, black[0].min() - p):min(binary.shape[0], black[0].max() + p),
+                max(0, black[1].min() - p):min(binary.shape[1], black[1].max() + p),
+            ]
+        rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
+        pil = PILImage.fromarray(rgb)
+        px  = _clf_transform(pil).unsqueeze(0).to(_clf_device)
+        with torch.no_grad():
+            logits = _clf_model(px)
+        probs          = torch.softmax(logits, dim=-1)[0]
+        conf_val, pred = probs.max(0)
+        word = _idx_to_class[pred.item()]
+        conf = round(conf_val.item() * 100, 1)
+        print(f'  [Classifier] → "{word}"  conf={conf}')
+        return word, conf
+    except Exception as e:
+        print(f'  [WARN] Classifier error: {e}')
+        return None, 0
 
-    for config in TESS_CONFIGS:
-        try:
-            data = pytesseract.image_to_data(
-                img, config=config, output_type=pytesseract.Output.DICT
-            )
-        except Exception as e:
-            print(f'  [WARN] Tesseract error with config "{config}": {e}')
-            continue
 
-        for text, conf in zip(data['text'], data['conf']):
-            text = text.strip()
-            conf = int(conf)
-            if text and conf > best_conf:
-                best_conf = conf
-                fixed = _DIGIT_FIX.get(text, text)
-                if fixed != text:
-                    print(f'  Post-process: "{text}" → "{fixed}"')
-                best_text = fixed
-                print(f'  [{config}] → "{best_text}"  conf={conf}')
-
-    return best_text, best_conf
-
-
-def process_frame(frame, show=True):
+def process_frame(frame, show=True, debug=False, skip_detection=False):
     display = frame.copy()
 
-    paper, bbox = find_white_paper(frame)
+    if skip_detection:
+        # Bypass paper finder — treat the whole image as the paper crop.
+        # Useful for og_photos which are already tight crops of the paper.
+        print('  [skip-detection] Using full image as paper crop')
+        h, w = frame.shape[:2]
+        paper = frame
+        bbox  = (0, 0, w, h)
+    else:
+        paper, bbox = find_white_paper(frame, debug=debug)
+
     if paper is None:
         print('  No white paper detected in frame')
         if show:
@@ -218,16 +255,20 @@ def process_frame(frame, show=True):
         cv2.rectangle(display, (bx, by), (bx + bw, by + bh), (0, 255, 0), 3)
         print(f'  White paper found: bbox=({bx},{by},{bw},{bh})')
 
-        preprocessed = preprocess(paper)
-        text, conf = run_tesseract(preprocessed)
+        if _CLASSIFIER_OK:
+            text, conf = run_classifier(paper)
+            engine = 'mobilenet'
+        else:
+            print('  No classifier available.')
+            text, conf, engine = None, 0, 'none'
 
         if text:
             status = 'ACCEPTED' if conf >= CONF_THRESH else 'LOW CONF'
-            print(f'  Tesseract result: "{text}"  conf={conf}/100  [{status}]')
+            print(f'  [{engine}] result: "{text}"  conf={conf}/100  [{status}]')
             colour = (0, 255, 0) if conf >= CONF_THRESH else (0, 165, 255)
-            label  = f'{text}  conf={conf}'
+            label  = f'{text}  conf={conf}  [{engine}]'
         else:
-            print('  Tesseract: no text detected')
+            print(f'  [{engine}] no text detected')
             colour = (0, 0, 255)
             label  = 'No text'
 
@@ -236,24 +277,28 @@ def process_frame(frame, show=True):
         cv2.putText(display, label, (bx, by - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, colour,       2)
 
-        # Save preprocessed crop so we can inspect what Tesseract sees
-        cv2.imwrite('/workspace/autonomous_nav/debug_paper.jpg', preprocessed)
-        print('  Saved preprocessed crop: debug_paper.jpg')
 
     # Save annotated frame
-    cv2.imwrite('/workspace/autonomous_nav/debug_frame.jpg', display)
+    cv2.imwrite(os.path.join(_DEBUG_DIR, 'debug_frame.jpg'), display)
     print('  Saved annotated frame:    debug_frame.jpg')
     return display
 
 
-def test_image(path):
+def test_image(path, debug=False, skip_detection=False):
     frame = cv2.imread(path)
     if frame is None:
         print(f'Cannot read image: {path}')
         sys.exit(1)
     print(f'\nTesting image: {path}')
-    process_frame(frame, show=False)
-    print('\nCheck debug_frame.jpg and debug_paper.jpg for visual output.')
+    if debug:
+        print('  [DEBUG MODE ON] — Will save intermediate steps')
+    process_frame(frame, show=False, debug=debug, skip_detection=skip_detection)
+    print('\nCheck debug_frame.jpg for visual output.')
+    if debug:
+        print('Also check:')
+        print('  • debug_01_hsv_mask.jpg     — Raw HSV mask')
+        print('  • debug_02_morphology.jpg   — After morphological ops')
+        print('  • debug_03_all_contours.jpg — All detected contours')
 
 
 def test_live():
@@ -288,9 +333,12 @@ def test_live():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', help='Path to image file to test')
+    parser.add_argument('--debug', action='store_true', help='Show detailed debug info and intermediate steps')
+    parser.add_argument('--skip-detection', action='store_true',
+                        help='Skip white paper detection — use for og_photos which are already cropped')
     args = parser.parse_args()
 
     if args.image:
-        test_image(args.image)
+        test_image(args.image, debug=args.debug, skip_detection=args.skip_detection)
     else:
         test_live()
