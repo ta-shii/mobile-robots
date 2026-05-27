@@ -262,3 +262,193 @@ Expected:
 - /auto_mode becomes true
 - /auto_cmd_vel publishes navigation commands
 - /cmd_vel follows auto command only while dead-man trigger is held
+
+Paste this after your Part 2 section.
+
+## Part 3
+### Overview
+Part 3 extends the robot system to support autonomous mapping, marker detection, obstacle detection, rapid waypoint navigation, live Foxglove monitoring, and rosbag recording.
+The system supports two mapping modes:
+- Manual mapping using the DS4 controller
+- Autonomous mapping using m-explore frontier exploration
+
+After mapping, the robot uses the detected Greek marker positions as waypoints and navigates to them in the shortest order before returning home.
+
+---
+### 1. Start Docker Container
+On the robot PC host:
+```bash
+cd ~/Desktop/group9/mobile-robots/autonomous_nav
+./run_docker.sh
+```
+
+2. Build Part 3 Package Inside Container
+
+Inside the container:
+
+```bash
+cd /workspace/autonomous_nav
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select part3_explore --build-base ros2_ws/build --install-base install
+source install/setup.bash
+```
+
+3. Clear Old Waypoints
+
+Before a new run, clear previous waypoint data:
+```bash
+echo '[]' > /workspace/autonomous_nav/outputs/markers/waypoints.json
+```
+
+4. Launch Full Part 3 System
+```bash 
+ros2 launch part3_explore robot.launch.py
+```
+
+5. Connect Foxglove
+
+On laptop:
+
+Chrome → https://app.foxglove.dev
+
+Connect to: `ws://LocalHost:8765`
+
+Add an Image panel and select: `/display/image/compressed`
+
+Foxglove should show:
+
+* mission state
+* SLAM map
+* robot position
+* detected markers
+* waypoint progress
+* Nav2 planned path
+* e-stop status
+
+
+6. Phase 1 — Mapping
+
+Option A: Manual Mapping
+
+Press: Triangle (△)
+
+Expected state: MANUAL_MAPPING
+
+Drive using:
+
+L1 deadman + left stick = forward/back
+L1 deadman + right stick = turn
+
+Use this mode to manually cover the area while SLAM builds the map. To read the robot map position:
+```bash
+ros2 run tf2_ros tf2_echo map base_link
+```
+Read x and y from the Translation line.
+
+
+Option B: Autonomous Mapping
+
+Press: Cross (X)
+
+Expected state: MAPPING
+
+The robot explores using m-explore frontier exploration. It builds the map, searches for unexplored frontiers, sends goals to Nav2, and avoids obstacles using lidar costmaps.
+
+Expected completion message: No frontiers found, stopping.
+
+
+7. Manually Write Waypoints to drive to 3 waypoints
+```bash
+cd /workspace/autonomous_nav
+./write_waypoints.sh
+```
+
+Follow the prompts:
+* select Greek letter
+* enter x coordinate
+* enter y coordinate
+
+Verify saved waypoints:
+```bash
+python3 -c "import json; print(json.load(open('/workspace/autonomous_nav/outputs/markers/waypoints.json')))"
+```
+
+8. Phase 2 — Rapid Waypoint Navigation
+
+Press: Square (□)
+
+Expected state: RAPID_NAV
+
+The robot will:
+* load marker waypoints from waypoints.json
+* compute the shortest visit order
+* send each waypoint to Nav2
+* avoid obstacles using Nav2
+* return to the starting/home position
+
+Monitor in Foxglove:
+* planned path
+* robot pose
+* waypoint progress
+* return-to-home status
+
+9. Emergency Stop and Recovery
+
+If e-stop is triggered: Wait 3 seconds for auto-clear or press: Circle (O) to return to: IDLE
+
+If the robot gets stuck: Press Circle (O) → return to IDLE
+Then restart mapping or waypoint navigation
+
+10. Check Output Files After Run
+
+Waypoints:
+```bash
+cat /workspace/autonomous_nav/outputs/markers/waypoints.json
+```
+Obstacles:
+```bash
+cat /workspace/autonomous_nav/outputs/markers/obstacles.json
+```
+Detected photos:
+```bash
+ls /workspace/autonomous_nav/outputs/markers/photos/
+```
+Rosbag recordings:
+```bash
+ls /workspace/autonomous_nav/outputs/bags/
+```
+E-stop clips:
+```bash
+ls /workspace/autonomous_nav/outputs/bags/estop_clips/
+```
+
+11. Useful Debug Commands
+
+Mission state:
+```bash
+ros2 topic echo /mission/state
+```
+E-stop status:
+```bash
+ros2 topic echo /estop/triggered
+```
+Velocity output to robot:
+```bash
+ros2 topic echo /cmd_vel
+```
+Nav2 velocity before safety filter:
+```bash
+ros2 topic echo /cmd_vel_nav
+```
+Detected markers:
+```bash
+ros2 topic echo /markers/detected
+```
+Waypoint index:
+```bash
+ros2 topic echo /waypoint_driver/index
+```
+Rosbag info:
+```bash
+ros2 bag info /workspace/autonomous_nav/outputs/bags/<bag_folder_name>
+```
